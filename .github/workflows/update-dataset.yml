@@ -1,0 +1,41 @@
+name: Update dataset
+
+on:
+  schedule:
+    # Weekly, Monday 06:00 UTC. Matches the extension's own
+    # MIN_FETCH_INTERVAL_MS (7 days) in nepo-babies-extension/src/content.ts.
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  update-dataset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run scraper
+        run: npm run scrape
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+
+      - name: Gzip output
+        run: npm run gzip-output
+
+      - name: Stage file for Pages publish
+        run: |
+          mkdir -p public
+          cp output/nepo-babies.json.gz public/nepo-babies.json.gz
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
