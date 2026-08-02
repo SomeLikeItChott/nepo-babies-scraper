@@ -4,6 +4,10 @@ import { normalizeToSlug } from "./slugify.js";
 
 const MAX_DISAMBIGUATION_SUFFIX = 5;
 
+// Matches a trailing generational suffix as its own word, so it doesn't
+// get treated as part of a surname by nameVariants() below.
+const GENERATIONAL_SUFFIX = /\s+(jr\.?|sr\.?|ii|iii|iv)$/i;
+
 function extractTmdbId(html: string): number | null {
   const $ = cheerio.load(html);
   const href = $('a[href*="themoviedb.org/person/"]').first().attr("href");
@@ -14,8 +18,36 @@ function extractTmdbId(html: string): number | null {
 }
 
 /**
+ * Generates alternate full-name phrasings to try slugifying, broadest/most
+ * literal first. Both confirmed live against real cases in unresolved.json:
+ * "Frank Stallone Jr." is actually credited on Letterboxd as "Frank
+ * Stallone" — Wikidata/TMDB's disambiguating generational suffix isn't
+ * necessarily reflected there — and "Saleka Night Shyamalan" drops her
+ * middle name to "Saleka Shyamalan", which Letterboxd redirects to her
+ * mononym page. Safe to try unconditionally: every guess this produces
+ * still gets verified against expectedTmdbId in resolveLetterboxdSlug
+ * before being accepted, so extra guesses can only add correct matches,
+ * never introduce wrong ones.
+ */
+function nameVariants(name: string): string[] {
+  const variants = new Set<string>([name]);
+
+  // Strip the generational suffix first so the middle-name-dropping check
+  // below doesn't mistake it for a surname (e.g. "Frank Stallone Jr." ->
+  // "Frank Jr." would be nonsense).
+  const withoutSuffix = name.replace(GENERATIONAL_SUFFIX, "").trim();
+  if (withoutSuffix !== name) variants.add(withoutSuffix);
+
+  const words = withoutSuffix.split(/\s+/);
+  if (words.length > 2) variants.add(`${words[0]} ${words[words.length - 1]}`);
+
+  return [...variants];
+}
+
+/**
  * Resolves a display name to a Letterboxd actor slug by guessing the slug
- * and its numbered disambiguation variants (Letterboxd's real pattern for
+ * (trying a few alternate name phrasings, see nameVariants) and each
+ * guess's numbered disambiguation variants (Letterboxd's real pattern for
  * name collisions, e.g. chris-evans, chris-evans-1, chris-evans-2), then
  * confirming the match via the TMDb id already known from Wikidata.
  *
@@ -27,24 +59,27 @@ export async function resolveLetterboxdSlug(
   name: string,
   expectedTmdbId: number,
 ): Promise<string | null> {
-  const baseSlug = normalizeToSlug(name);
+  for (const variant of nameVariants(name)) {
+    const baseSlug = normalizeToSlug(variant);
 
-  for (let suffix = 0; suffix <= MAX_DISAMBIGUATION_SUFFIX; suffix++) {
-    const slug = suffix === 0 ? baseSlug : `${baseSlug}-${suffix}`;
-    const url = `https://letterboxd.com/actor/${slug}/`;
+    for (let suffix = 0; suffix <= MAX_DISAMBIGUATION_SUFFIX; suffix++) {
+      const slug = suffix === 0 ? baseSlug : `${baseSlug}-${suffix}`;
+      const url = `https://letterboxd.com/actor/${slug}/`;
 
-    const { status, body } = await fetchWithCache(url);
-    if (status === 404) {
-      // Only keep trying suffixes if the base page existed at all; a 404 on
-      // suffix 0 doesn't guarantee -1 exists, but it's cheap enough to check
-      // since Letterboxd only allocates suffixes for actual collisions.
-      continue;
-    }
-    if (status !== 200) continue;
+      const { status, body } = await fetchWithCache(url);
+      if (status === 404) {
+        // Only keep trying suffixes if the base page existed at all; a 404
+        // on suffix 0 doesn't guarantee -1 exists, but it's cheap enough to
+        // check since Letterboxd only allocates suffixes for actual
+        // collisions.
+        continue;
+      }
+      if (status !== 200) continue;
 
-    const tmdbId = extractTmdbId(body);
-    if (tmdbId === expectedTmdbId) {
-      return slug;
+      const tmdbId = extractTmdbId(body);
+      if (tmdbId === expectedTmdbId) {
+        return slug;
+      }
     }
   }
 
