@@ -90,6 +90,10 @@ export async function fetchPopularActors(targetCount: number): Promise<PopularPe
 
 interface TmdbMovie {
   id: number;
+  title: string;
+  poster_path: string | null;
+  release_date: string;
+  popularity: number;
 }
 
 interface TmdbPopularMoviesResponse {
@@ -105,19 +109,31 @@ interface TmdbCreditsResponse {
   cast: TmdbCastMember[];
 }
 
+export interface FilmCast {
+  tmdbId: number;
+  title: string;
+  posterPath: string | null;
+  releaseYear: number | null;
+  popularity: number;
+  cast: PopularPerson[];
+}
+
 /**
  * Fetches the full cast of the top `movieCount` popular movies
  * (`/movie/popular`, 20/page, then one `/movie/{id}/credits` call per
- * movie). Unlike fetchPopularActors, this takes the *entire* cast list per
- * movie with no billing-order cutoff — Letterboxd's own cast lists
- * routinely include named bit-part roles well past the top 20 (confirmed
- * live on Dune: Part Two's page, e.g. "Young Fremen Patrol"), so trimming
- * here would just mean missing real matches later. This means a single
- * popular movie can contribute 60+ candidates, so the resulting pool is
- * intentionally much larger than fetchPopularActors' output.
+ * movie), keeping each movie's cast grouped under it (title/poster/
+ * popularity come from the same `/movie/popular` response, already fetched
+ * for the pagination — no extra requests). Unlike fetchPopularActors, this
+ * takes the *entire* cast list per movie with no billing-order cutoff —
+ * Letterboxd's own cast lists routinely include named bit-part roles well
+ * past the top 20 (confirmed live on Dune: Part Two's page, e.g. "Young
+ * Fremen Patrol"), so trimming here would just mean missing real matches
+ * later. This means a single popular movie can contribute 60+ candidates,
+ * so the resulting pool is intentionally much larger than
+ * fetchPopularActors' output.
  */
-export async function fetchPopularMovieCast(movieCount: number): Promise<PopularPerson[]> {
-  const actors: PopularPerson[] = [];
+export async function fetchPopularMovieCast(movieCount: number): Promise<FilmCast[]> {
+  const films: FilmCast[] = [];
   let page = 1;
   let moviesSeen = 0;
 
@@ -134,9 +150,14 @@ export async function fetchPopularMovieCast(movieCount: number): Promise<Popular
       const credits = await tmdbFetch<TmdbCreditsResponse>(`/movie/${movie.id}/credits`, {
         language: "en-US",
       });
-      for (const member of credits.cast) {
-        actors.push({ tmdbId: member.id, name: member.name });
-      }
+      films.push({
+        tmdbId: movie.id,
+        title: movie.title,
+        posterPath: movie.poster_path,
+        releaseYear: movie.release_date ? Number(movie.release_date.slice(0, 4)) : null,
+        popularity: movie.popularity,
+        cast: credits.cast.map((member) => ({ tmdbId: member.id, name: member.name })),
+      });
 
       await sleep(REQUEST_DELAY_MS);
     }
@@ -144,7 +165,7 @@ export async function fetchPopularMovieCast(movieCount: number): Promise<Popular
     page++;
   }
 
-  return actors;
+  return films;
 }
 
 interface TmdbPersonSearchResult {

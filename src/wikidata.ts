@@ -2,6 +2,7 @@ import type { NepoCandidate, RelationType } from "./types.js";
 import {
   fetchPopularActors as fetchPopularActorsFromTmdb,
   fetchPopularMovieCast,
+  type FilmCast,
   type PopularPerson,
 } from "./tmdb.js";
 
@@ -345,11 +346,15 @@ async function fetchBirthDatesByQid(qids: string[]): Promise<Map<string, string>
   return birthDateByQid;
 }
 
-export async function fetchNepoCandidates(): Promise<NepoCandidate[]> {
-  const [popularPeople, movieCastPeople] = await Promise.all([
+export async function fetchNepoCandidates(): Promise<{
+  candidates: NepoCandidate[];
+  filmCasts: FilmCast[];
+}> {
+  const [popularPeople, filmCasts] = await Promise.all([
     fetchPopularActorsFromTmdb(TARGET_ACTOR_COUNT),
     fetchPopularMovieCast(TARGET_MOVIE_COUNT),
   ]);
+  const movieCastPeople = filmCasts.flatMap((f) => f.cast);
 
   const dedupedByTmdbId = new Map<number, PopularPerson>();
   for (const person of [...popularPeople, ...movieCastPeople]) {
@@ -367,16 +372,19 @@ export async function fetchNepoCandidates(): Promise<NepoCandidate[]> {
     fetchBirthDatesByQid(allParentQids),
   ]);
 
-  return rawCandidates.map((c) => ({
+  const candidates = rawCandidates.map((c) => ({
     name: c.name,
     tmdbId: c.tmdbId,
     relations: c.relations.map((r) => ({
       type: r.type,
       name: r.name,
+      qid: r.qid,
       occupations: occupationsByQid.get(r.qid) ?? [],
       tmdbId: parentTmdbIdByQid.get(r.qid),
       birthDate: parentBirthDateByQid.get(r.qid),
       wikipediaUrl: r.wikipediaUrl,
     })),
   }));
+
+  return { candidates, filmCasts };
 }

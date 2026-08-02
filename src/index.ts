@@ -3,6 +3,8 @@ import path from "node:path";
 import { fetchNepoCandidates } from "./wikidata.js";
 import { resolveLetterboxdSlug } from "./letterboxd.js";
 import { searchTmdbPersonId } from "./tmdb.js";
+import { computeFilmStats } from "./films.js";
+import { computeParentStats } from "./parents.js";
 import type { NepoDataset, ResolvedRelation, UnresolvedCandidate } from "./types.js";
 
 const OUTPUT_DIR = path.join(process.cwd(), "output");
@@ -18,7 +20,7 @@ async function main() {
   }
 
   console.log("Fetching popular actors from TMDB and checking Wikidata for notable parents...");
-  const candidates = await fetchNepoCandidates();
+  const { candidates, filmCasts } = await fetchNepoCandidates();
   console.log(`Found ${candidates.length} candidates. Resolving Letterboxd slugs...`);
 
   const dataset: NepoDataset = {};
@@ -68,12 +70,23 @@ async function main() {
     }
   }
 
+  // Film/parent stats are TMDB/Wikidata-native concepts for the stats site,
+  // independent of Letterboxd resolution — computed from the full candidate
+  // list (not just the Letterboxd-resolved subset in `dataset`), so a film
+  // or parent's count isn't undercounted just because a child's Letterboxd
+  // slug guess failed.
+  const nepoBabyTmdbIds = new Set(candidates.map((c) => c.tmdbId));
+  const filmStats = computeFilmStats(filmCasts, nepoBabyTmdbIds);
+  const parentStats = computeParentStats(candidates);
+
   await mkdir(OUTPUT_DIR, { recursive: true });
   await writeFile(path.join(OUTPUT_DIR, "nepo-babies.json"), JSON.stringify(dataset));
   await writeFile(
     path.join(OUTPUT_DIR, "unresolved.json"),
     JSON.stringify(unresolved, null, 2),
   );
+  await writeFile(path.join(OUTPUT_DIR, "films.json"), JSON.stringify(filmStats));
+  await writeFile(path.join(OUTPUT_DIR, "parents.json"), JSON.stringify(parentStats));
 
   console.log(
     `\nDone. Resolved ${Object.keys(dataset).length}/${candidates.length} ` +

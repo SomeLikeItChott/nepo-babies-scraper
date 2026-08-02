@@ -3,6 +3,8 @@ export type RelationType = "father" | "mother";
 export interface CandidateRelation {
   type: RelationType;
   name: string;
+  /** This parent's Wikidata QID — a stable identity key for grouping the same parent across different actors' entries (see computeParentStats in parents.ts). Not part of the extension-facing ResolvedRelation. */
+  qid: string;
   /** Raw Wikidata occupation labels (P106) for this parent, unfiltered and unordered. */
   occupations: string[];
   /** This parent's own TMDb id (P4985), if Wikidata has one — used to resolve their Letterboxd slug. */
