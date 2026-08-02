@@ -34,12 +34,9 @@ Letterboxd (matching actors and parents to their profile pages).
 ## Stats site
 
 [`site/`](site/) is a small Vite + TypeScript static site showing
-aggregate stats: a histogram of nepo babies per film, the highest
-nepo-baby-percentage films and the most popular recent zero-nepo-baby
-film (both with posters), and the parent with the most nepo babies in the
-dataset.
+aggregate stats over the dataset.
 
-<!-- TODO: screenshot of the histogram and poster grid -->
+<!-- TODO: screenshot of the site -->
 
 ```sh
 cd site
