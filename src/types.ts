@@ -28,6 +28,7 @@ export interface ResolvedRelation {
 export interface NepoCandidate {
   name: string;
   tmdbId: number;
+  popularity: number;
   relations: CandidateRelation[];
 }
 

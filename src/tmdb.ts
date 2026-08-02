@@ -10,6 +10,7 @@ function sleep(ms: number): Promise<void> {
 export interface PopularPerson {
   tmdbId: number;
   name: string;
+  popularity: number;
 }
 
 async function tmdbFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {
@@ -50,6 +51,7 @@ interface TmdbPerson {
   id: number;
   name: string;
   known_for_department: string;
+  popularity: number;
 }
 
 interface TmdbPopularPeopleResponse {
@@ -77,7 +79,7 @@ export async function fetchPopularActors(targetCount: number): Promise<PopularPe
 
     for (const person of data.results) {
       if (person.known_for_department === "Acting") {
-        actors.push({ tmdbId: person.id, name: person.name });
+        actors.push({ tmdbId: person.id, name: person.name, popularity: person.popularity });
       }
     }
 
@@ -103,6 +105,7 @@ interface TmdbPopularMoviesResponse {
 interface TmdbCastMember {
   id: number;
   name: string;
+  popularity: number;
 }
 
 interface TmdbCreditsResponse {
@@ -114,6 +117,7 @@ export interface FilmCast {
   title: string;
   posterPath: string | null;
   releaseYear: number | null;
+  releaseDate: string | null;
   popularity: number;
   cast: PopularPerson[];
 }
@@ -155,8 +159,9 @@ export async function fetchPopularMovieCast(movieCount: number): Promise<FilmCas
         title: movie.title,
         posterPath: movie.poster_path,
         releaseYear: movie.release_date ? Number(movie.release_date.slice(0, 4)) : null,
+        releaseDate: movie.release_date || null,
         popularity: movie.popularity,
-        cast: credits.cast.map((member) => ({ tmdbId: member.id, name: member.name })),
+        cast: credits.cast.map((member) => ({ tmdbId: member.id, name: member.name, popularity: member.popularity })),
       });
 
       await sleep(REQUEST_DELAY_MS);

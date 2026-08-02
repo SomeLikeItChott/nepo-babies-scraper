@@ -5,7 +5,7 @@ export interface ParentStats {
   name: string;
   wikipediaUrl: string;
   occupations: string[];
-  children: { name: string; tmdbId: number }[];
+  children: { name: string; tmdbId: number; popularity: number }[];
 }
 
 /**
@@ -33,7 +33,7 @@ export function computeParentStats(candidates: NepoCandidate[]): ParentStats[] {
         };
         byQid.set(relation.qid, parent);
       }
-      parent.children.push({ name: candidate.name, tmdbId: candidate.tmdbId });
+      parent.children.push({ name: candidate.name, tmdbId: candidate.tmdbId, popularity: candidate.popularity });
     }
   }
 

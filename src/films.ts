@@ -5,6 +5,7 @@ export interface FilmStats {
   title: string;
   posterPath: string | null;
   releaseYear: number | null;
+  releaseDate: string | null;
   popularity: number;
   castSize: number;
   nepoBabyCount: number;
@@ -29,6 +30,7 @@ export function computeFilmStats(filmCasts: FilmCast[], nepoBabyTmdbIds: Set<num
       title: film.title,
       posterPath: film.posterPath,
       releaseYear: film.releaseYear,
+      releaseDate: film.releaseDate,
       popularity: film.popularity,
       castSize: film.cast.length,
       nepoBabyCount: matches.length,

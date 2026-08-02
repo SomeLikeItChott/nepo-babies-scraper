@@ -203,6 +203,7 @@ interface PopularActor {
   qid: string;
   name: string;
   tmdbId: number;
+  popularity: number;
 }
 
 /**
@@ -222,7 +223,12 @@ async function resolveWikidataQids(people: PopularPerson[]): Promise<PopularActo
     for (const b of bindings) {
       const person = byTmdbId.get(b.personTmdb.value);
       if (!person) continue;
-      resolved.push({ qid: qidFromUri(b.person.value), name: person.name, tmdbId: person.tmdbId });
+      resolved.push({
+        qid: qidFromUri(b.person.value),
+        name: person.name,
+        tmdbId: person.tmdbId,
+        popularity: person.popularity,
+      });
     }
   }
 
@@ -240,6 +246,7 @@ interface RawCandidate {
   qid: string;
   name: string;
   tmdbId: number;
+  popularity: number;
   relations: RawRelation[];
 }
 
@@ -273,7 +280,13 @@ async function fetchNotableParents(actors: PopularActor[]): Promise<RawCandidate
         });
       }
 
-      candidates.push({ qid: actor.qid, name: actor.name, tmdbId: actor.tmdbId, relations });
+      candidates.push({
+        qid: actor.qid,
+        name: actor.name,
+        tmdbId: actor.tmdbId,
+        popularity: actor.popularity,
+        relations,
+      });
     }
   }
 
@@ -396,6 +409,7 @@ export async function fetchNepoCandidates(): Promise<{
   const candidates = rawCandidates.map((c) => ({
     name: c.name,
     tmdbId: c.tmdbId,
+    popularity: c.popularity,
     relations: c.relations.map((r) => ({
       type: r.type,
       name: r.name,

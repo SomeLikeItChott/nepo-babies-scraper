@@ -9,6 +9,7 @@ export interface FilmStats {
   title: string;
   posterPath: string | null;
   releaseYear: number | null;
+  releaseDate: string | null;
   popularity: number;
   castSize: number;
   nepoBabyCount: number;
@@ -20,5 +21,5 @@ export interface ParentStats {
   name: string;
   wikipediaUrl: string;
   occupations: string[];
-  children: { name: string; tmdbId: number }[];
+  children: { name: string; tmdbId: number; popularity: number }[];
 }

@@ -39,7 +39,11 @@ header p {
 }
 
 section {
-  margin: 2.5rem 0;
+  margin: 2rem 0;
+}
+
+.section-hero {
+  margin: 3.5rem 0;
 }
 
 h1 {
@@ -98,19 +102,25 @@ canvas#histogram {
   padding: 0.15rem 0.6rem 0;
 }
 
+.film-subtitle strong {
+  color: var(--fg);
+  font-weight: 700;
+}
+
 .film-nepo-list {
   font-size: 0.8rem;
   padding: 0.35rem 0.6rem 0;
 }
 
 .parent-card {
-  background: var(--card-bg);
+  background: color-mix(in srgb, var(--accent) 10%, var(--card-bg));
+  border-left: 4px solid var(--accent);
   border-radius: 8px;
-  padding: 1rem 1.25rem;
+  padding: 1.5rem 1.75rem;
 }
 
 .parent-name {
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 600;
 }
 
@@ -120,8 +130,22 @@ canvas#histogram {
 }
 
 .parent-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.parent-count-number {
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.parent-count-label {
   color: var(--muted);
-  margin-top: 0.25rem;
+  font-size: 0.95rem;
 }
 
 .parent-children {
