@@ -17,6 +17,10 @@ function formatPercent(count: number, total: number): string {
   return total > 0 ? `${((count / total) * 100).toFixed(1)}%` : "—";
 }
 
+function personLink(name: string, wikipediaUrl?: string): string {
+  return wikipediaUrl ? `<a href="${wikipediaUrl}" target="_blank" rel="noopener">${name}</a>` : name;
+}
+
 function isReleased(film: FilmStats): boolean {
   return !film.releaseDate || new Date(film.releaseDate) <= new Date();
 }
@@ -95,41 +99,49 @@ function renderHistogram(films: FilmStats[]): void {
   });
 }
 
-interface FilmCardOptions {
-  caption: string;
-  nepoBabyNames?: string[];
+interface NepoBaby {
+  name: string;
+  wikipediaUrl?: string;
 }
 
-function filmCard(film: FilmStats, { caption, nepoBabyNames }: FilmCardOptions): string {
+interface FilmCardOptions {
+  caption: string;
+  nepoBabies?: NepoBaby[];
+}
+
+function filmCard(film: FilmStats, { caption, nepoBabies }: FilmCardOptions): string {
   const poster = posterUrl(film.posterPath);
   const posterHtml = poster
     ? `<img src="${poster}" alt="${film.title} poster" loading="lazy" />`
     : `<div class="poster-placeholder">No poster</div>`;
   const namesHtml =
-    nepoBabyNames && nepoBabyNames.length > 0
-      ? `<div class="film-nepo-list">${nepoBabyNames.join(", ")}</div>`
+    nepoBabies && nepoBabies.length > 0
+      ? `<div class="film-nepo-list">${nepoBabies.map((c) => personLink(c.name, c.wikipediaUrl)).join(", ")}</div>`
       : "";
+  const tmdbUrl = `https://www.themoviedb.org/movie/${film.tmdbId}`;
   return `
     <div class="film-card">
       ${posterHtml}
-      <div class="film-title">${film.title}${film.releaseYear ? ` (${film.releaseYear})` : ""}</div>
+      <div class="film-title">
+        <a href="${tmdbUrl}" target="_blank" rel="noopener">${film.title}</a>${film.releaseYear ? ` (${film.releaseYear})` : ""}
+      </div>
       <div class="film-subtitle">${caption}</div>
       ${namesHtml}
     </div>
   `;
 }
 
-function buildNepoBabyNameMap(parents: ParentStats[]): Map<number, string> {
-  const names = new Map<number, string>();
+function buildNepoBabyMap(parents: ParentStats[]): Map<number, NepoBaby> {
+  const babies = new Map<number, NepoBaby>();
   for (const parent of parents) {
     for (const child of parent.children) {
-      names.set(child.tmdbId, child.name);
+      babies.set(child.tmdbId, { name: child.name, wikipediaUrl: child.wikipediaUrl });
     }
   }
-  return names;
+  return babies;
 }
 
-function renderGreatestPercent(films: FilmStats[], nepoBabyNames: Map<number, string>): void {
+function renderGreatestPercent(films: FilmStats[], nepoBabies: Map<number, NepoBaby>): void {
   const ranked = films
     .filter((f) => f.castSize > 0)
     .map((f) => ({ film: f, percent: f.nepoBabyCount / f.castSize }))
@@ -139,10 +151,10 @@ function renderGreatestPercent(films: FilmStats[], nepoBabyNames: Map<number, st
   const container = document.getElementById("greatest-percent")!;
   container.innerHTML = ranked
     .map(({ film }) => {
-      const names = film.nepoBabyTmdbIds.map((id) => nepoBabyNames.get(id) ?? "Unknown");
+      const babies = film.nepoBabyTmdbIds.map((id) => nepoBabies.get(id) ?? { name: "Unknown" });
       return filmCard(film, {
         caption: `<strong>${formatPercent(film.nepoBabyCount, film.castSize)}</strong> nepo babies (${film.nepoBabyCount}/${film.castSize})`,
-        nepoBabyNames: names,
+        nepoBabies: babies,
       });
     })
     .join("");
@@ -157,7 +169,7 @@ function renderZeroNepoFilms(films: FilmStats[]): void {
   const container = document.getElementById("zero-nepo-films")!;
   container.innerHTML =
     top.length > 0
-      ? top.map((film) => filmCard(film, { caption: "Zero nepo babies in the cast" })).join("")
+      ? top.map((film) => filmCard(film, { caption: `(0/${film.castSize}) nepo babies` })).join("")
       : "<p>No qualifying films found.</p>";
 }
 
@@ -174,7 +186,7 @@ function renderTopParent(parents: ParentStats[]): void {
     return;
   }
 
-  const childrenList = top.children.map((c) => c.name).join(", ");
+  const childrenList = top.children.map((c) => personLink(c.name, c.wikipediaUrl)).join(", ");
   container.innerHTML = `
     <div class="parent-card">
       <div class="parent-name"><a href="${top.wikipediaUrl}" target="_blank" rel="noopener">${top.name}</a></div>
@@ -191,10 +203,22 @@ async function main() {
   const app = document.getElementById("app")!;
   app.innerHTML = `
     <header>
-      <h1>Nepo Babies Stats</h1>
-      <p>Aggregate stats over the actors/films tracked by
-        <a href="https://github.com/SomeLikeItChott/nepo-babies-scraper" target="_blank" rel="noopener">nepo-baby-scraper</a>.
-      </p>
+      <div class="hero-title-band">
+        <div class="hero-inner">
+          <h1>Nepo Baby Actor Tracker</h1>
+        </div>
+      </div>
+      <div class="hero-intro-band">
+        <div class="hero-inner">
+          <p>Data is updated weekly from TMDB and Wikidata by 
+            <a href="https://github.com/SomeLikeItChott/nepo-babies-scraper" target="_blank" rel="noopener">nepo-baby-scraper</a>.
+          </p>
+          <p class="header-note">
+            A nepo baby is defined here as any actor with a parent important enough to have their own Wikipedia page. Stats on this page are drawn from the 1000 most popular films, as ranked by TMDB.
+          </p>
+          
+        </div>
+      </div>
     </header>
     <main>
       <section>
@@ -207,6 +231,9 @@ async function main() {
       </section>
       <section class="section-hero">
         <h2>Nepo parent with the most popular children</h2>
+        <p class="section-note">
+          The parent whose nepo-baby children have the highest combined popularity, as ranked by TMDB.
+        </p>
         <div id="top-parent"></div>
       </section>
       <section>
@@ -222,7 +249,7 @@ async function main() {
   const { films, parents } = await loadData();
   const displayFilms = selectDisplayFilms(films);
   renderHistogram(displayFilms);
-  renderGreatestPercent(displayFilms, buildNepoBabyNameMap(parents));
+  renderGreatestPercent(displayFilms, buildNepoBabyMap(parents));
   renderZeroNepoFilms(displayFilms);
   renderTopParent(parents);
 }

@@ -138,18 +138,25 @@ export interface FilmCast {
  */
 export async function fetchPopularMovieCast(movieCount: number): Promise<FilmCast[]> {
   const films: FilmCast[] = [];
+  const seenMovieIds = new Set<number>();
   let page = 1;
-  let moviesSeen = 0;
 
-  while (moviesSeen < movieCount && page <= MAX_TMDB_PAGE) {
+  while (films.length < movieCount && page <= MAX_TMDB_PAGE) {
     const data = await tmdbFetch<TmdbPopularMoviesResponse>("/movie/popular", {
       language: "en-US",
       page: String(page),
     });
 
     for (const movie of data.results) {
-      if (moviesSeen >= movieCount) break;
-      moviesSeen++;
+      if (films.length >= movieCount) break;
+
+      // TMDB's popularity ranking is live and shifts while a scrape is in
+      // progress (this can take well over an hour), so the same movie can
+      // land on two different pages fetched at different times — skip
+      // repeats rather than double-counting them and wasting a credits
+      // fetch on a duplicate.
+      if (seenMovieIds.has(movie.id)) continue;
+      seenMovieIds.add(movie.id);
 
       const credits = await tmdbFetch<TmdbCreditsResponse>(`/movie/${movie.id}/credits`, {
         language: "en-US",

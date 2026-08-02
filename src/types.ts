@@ -29,6 +29,8 @@ export interface NepoCandidate {
   name: string;
   tmdbId: number;
   popularity: number;
+  /** This actor's own English Wikipedia article, if Wikidata has one — distinct from a parent's article. */
+  wikipediaUrl?: string;
   relations: CandidateRelation[];
 }
 

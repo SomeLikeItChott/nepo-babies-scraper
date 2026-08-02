@@ -21,5 +21,5 @@ export interface ParentStats {
   name: string;
   wikipediaUrl: string;
   occupations: string[];
-  children: { name: string; tmdbId: number; popularity: number }[];
+  children: { name: string; tmdbId: number; popularity: number; wikipediaUrl?: string }[];
 }

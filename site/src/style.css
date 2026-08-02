@@ -31,11 +31,49 @@ body {
 #app {
   max-width: 960px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 0 1.5rem 1.5rem;
+}
+
+.hero-title-band,
+.hero-intro-band {
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+}
+
+.hero-title-band {
+  background: var(--accent);
+  padding: 2rem 0;
+}
+
+.hero-title-band h1 {
+  color: #fff;
+  margin: 0.5rem 0 0;
+}
+
+.hero-intro-band {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  padding: 1.25rem 0 1.5rem;
+}
+
+.hero-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
 }
 
 header p {
   color: var(--muted);
+}
+
+.header-note {
+  font-size: 0.85rem;
+  margin-top: -0.5rem;
+}
+
+.section-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: -0.75rem;
 }
 
 section {
@@ -96,6 +134,15 @@ canvas#histogram {
   padding: 0.5rem 0.6rem 0;
 }
 
+.film-title a {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.film-title a:hover {
+  text-decoration: underline;
+}
+
 .film-subtitle {
   color: var(--muted);
   font-size: 0.8rem;
@@ -110,6 +157,17 @@ canvas#histogram {
 .film-nepo-list {
   font-size: 0.8rem;
   padding: 0.35rem 0.6rem 0;
+}
+
+.film-nepo-list a,
+.parent-children a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.film-nepo-list a:hover,
+.parent-children a:hover {
+  text-decoration: underline;
 }
 
 .parent-card {

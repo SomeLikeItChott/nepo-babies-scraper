@@ -102,6 +102,16 @@ SELECT ?person ?personTmdb WHERE {
 `.trim();
 }
 
+function buildWikipediaUrlQuery(qids: string[]): string {
+  const values = qids.map((qid) => `wd:${qid}`).join(" ");
+  return `
+SELECT ?person ?article WHERE {
+  VALUES ?person { ${values} }
+  ?article schema:about ?person ; schema:isPartOf <https://en.wikipedia.org/> .
+}
+`.trim();
+}
+
 function buildBirthDateQuery(qids: string[]): string {
   const values = qids.map((qid) => `wd:${qid}`).join(" ");
   return `
@@ -140,6 +150,11 @@ interface ParentTmdbIdBinding {
 interface BirthDateBinding {
   person: { value: string };
   birthDate: { value: string };
+}
+
+interface WikipediaUrlBinding {
+  person: { value: string };
+  article: { value: string };
 }
 
 interface SparqlResponse<T> {
@@ -247,6 +262,7 @@ interface RawCandidate {
   name: string;
   tmdbId: number;
   popularity: number;
+  wikipediaUrl?: string;
   relations: RawRelation[];
 }
 
@@ -360,6 +376,29 @@ async function fetchBirthDatesByQid(qids: string[]): Promise<Map<string, string>
   return birthDateByQid;
 }
 
+/**
+ * Batch-fetches each actor's own English Wikipedia article (schema:about),
+ * if Wikidata has one — separate from a parent's article (see
+ * buildNotableParentsQuery), since being a nepo baby only requires a
+ * notable *parent*, not the actor having their own page. Naturally a subset
+ * of the input; the caller still needs to redirect-check the results the
+ * same way parent articles are (see findRedirectUrls in wikipedia.ts).
+ */
+async function fetchWikipediaUrlsByQid(qids: string[]): Promise<Map<string, string>> {
+  const urlByQid = new Map<string, string>();
+
+  for (const [i, batch] of chunk(qids, VALUES_BATCH_SIZE).entries()) {
+    if (i > 0) await sleep(300);
+
+    const bindings = await runQuery<WikipediaUrlBinding>(buildWikipediaUrlQuery(batch));
+    for (const b of bindings) {
+      urlByQid.set(qidFromUri(b.person.value), b.article.value);
+    }
+  }
+
+  return urlByQid;
+}
+
 export async function fetchNepoCandidates(): Promise<{
   candidates: NepoCandidate[];
   filmCasts: FilmCast[];
@@ -379,24 +418,38 @@ export async function fetchNepoCandidates(): Promise<{
   const resolvedActors = await resolveWikidataQids(popularActors);
   const notableParentCandidates = await fetchNotableParents(resolvedActors);
 
-  // A parent's Wikidata sitelink can point to an enwiki page that Wikipedia
-  // later redirected elsewhere (often into a more famous relative's
-  // article) without Wikidata's sitelink metadata catching up — passing
-  // the SPARQL query above doesn't guarantee an independent article
-  // actually exists. Drop relations whose article turns out to be a
-  // redirect, and drop the candidate entirely if that was their only
-  // qualifying relation — same treatment as if Wikidata never found a
-  // notable parent for them at all. See wikipedia.ts for confirmed live
-  // examples (Rudy Giuliani, LeBron James).
+  // The actor's own Wikipedia article, if any — distinct from a parent's
+  // article, since being a nepo baby only requires a notable *parent*, not
+  // the actor having their own page.
+  const actorQids = [...new Set(notableParentCandidates.map((c) => c.qid))];
+  const actorWikipediaUrlByQid = await fetchWikipediaUrlsByQid(actorQids);
+
+  // A Wikidata sitelink (parent's or the actor's own) can point to an
+  // enwiki page that Wikipedia later redirected elsewhere (often into a
+  // more famous relative's article) without Wikidata's sitelink metadata
+  // catching up — passing the SPARQL query above doesn't guarantee an
+  // independent article actually exists. Drop relations (and the actor's
+  // own article) whose page turns out to be a redirect, and drop the
+  // candidate entirely if that was their only qualifying relation — same
+  // treatment as if Wikidata never found a notable parent for them at all.
+  // See wikipedia.ts for confirmed live examples (Rudy Giuliani, LeBron
+  // James).
   const allWikipediaUrls = [
-    ...new Set(notableParentCandidates.flatMap((c) => c.relations.map((r) => r.wikipediaUrl))),
+    ...new Set([
+      ...notableParentCandidates.flatMap((c) => c.relations.map((r) => r.wikipediaUrl)),
+      ...actorWikipediaUrlByQid.values(),
+    ]),
   ];
   const redirectUrls = await findRedirectUrls(allWikipediaUrls);
   const rawCandidates = notableParentCandidates
-    .map((c) => ({
-      ...c,
-      relations: c.relations.filter((r) => !redirectUrls.has(r.wikipediaUrl)),
-    }))
+    .map((c) => {
+      const actorUrl = actorWikipediaUrlByQid.get(c.qid);
+      return {
+        ...c,
+        wikipediaUrl: actorUrl && !redirectUrls.has(actorUrl) ? actorUrl : undefined,
+        relations: c.relations.filter((r) => !redirectUrls.has(r.wikipediaUrl)),
+      };
+    })
     .filter((c) => c.relations.length > 0);
 
   const allParentQids = [...new Set(rawCandidates.flatMap((c) => c.relations.map((r) => r.qid)))];
@@ -410,6 +463,7 @@ export async function fetchNepoCandidates(): Promise<{
     name: c.name,
     tmdbId: c.tmdbId,
     popularity: c.popularity,
+    wikipediaUrl: c.wikipediaUrl,
     relations: c.relations.map((r) => ({
       type: r.type,
       name: r.name,
