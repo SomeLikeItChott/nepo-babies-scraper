@@ -22,6 +22,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -34,10 +37,19 @@ jobs:
       - name: Gzip output
         run: npm run gzip-output
 
-      - name: Stage file for Pages publish
+      - name: Build site
+        working-directory: site
+        run: |
+          npm ci
+          npm run build
+
+      - name: Stage files for Pages publish
         run: |
           mkdir -p public
           cp output/nepo-babies.json.gz public/nepo-babies.json.gz
+          cp output/films.json public/films.json
+          cp output/parents.json public/parents.json
+          cp -r site/dist/. public/
 
       - name: Publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4
