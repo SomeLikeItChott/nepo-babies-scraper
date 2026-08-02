@@ -98,6 +98,11 @@ canvas#histogram {
   padding: 0.15rem 0.6rem 0;
 }
 
+.film-nepo-list {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.6rem 0;
+}
+
 .parent-card {
   background: var(--card-bg);
   border-radius: 8px;

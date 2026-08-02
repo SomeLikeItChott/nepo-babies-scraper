@@ -5,6 +5,7 @@ Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
 
 const POSTER_SIZE = "w342";
 const GREATEST_PERCENT_COUNT = 5;
+const ZERO_NEPO_COUNT = 5;
 
 function posterUrl(posterPath: string | null): string | null {
   return posterPath ? `https://image.tmdb.org/t/p/${POSTER_SIZE}${posterPath}` : null;
@@ -47,21 +48,36 @@ function renderHistogram(films: FilmStats[]): void {
   });
 }
 
-function filmCard(film: FilmStats, subtitle: string): string {
+function filmCard(film: FilmStats, subtitle: string, nepoBabyNames?: string[]): string {
   const poster = posterUrl(film.posterPath);
   const posterHtml = poster
     ? `<img src="${poster}" alt="${film.title} poster" loading="lazy" />`
     : `<div class="poster-placeholder">No poster</div>`;
+  const namesHtml =
+    nepoBabyNames && nepoBabyNames.length > 0
+      ? `<div class="film-nepo-list">${nepoBabyNames.join(", ")}</div>`
+      : "";
   return `
     <div class="film-card">
       ${posterHtml}
       <div class="film-title">${film.title}${film.releaseYear ? ` (${film.releaseYear})` : ""}</div>
       <div class="film-subtitle">${subtitle}</div>
+      ${namesHtml}
     </div>
   `;
 }
 
-function renderGreatestPercent(films: FilmStats[]): void {
+function buildNepoBabyNameMap(parents: ParentStats[]): Map<number, string> {
+  const names = new Map<number, string>();
+  for (const parent of parents) {
+    for (const child of parent.children) {
+      names.set(child.tmdbId, child.name);
+    }
+  }
+  return names;
+}
+
+function renderGreatestPercent(films: FilmStats[], nepoBabyNames: Map<number, string>): void {
   const ranked = films
     .filter((f) => f.castSize > 0)
     .map((f) => ({ film: f, percent: f.nepoBabyCount / f.castSize }))
@@ -70,20 +86,26 @@ function renderGreatestPercent(films: FilmStats[]): void {
 
   const container = document.getElementById("greatest-percent")!;
   container.innerHTML = ranked
-    .map(
-      ({ film }) =>
-        filmCard(film, `${formatPercent(film.nepoBabyCount, film.castSize)} nepo babies (${film.nepoBabyCount}/${film.castSize})`),
-    )
+    .map(({ film }) => {
+      const names = film.nepoBabyTmdbIds.map((id) => nepoBabyNames.get(id) ?? "Unknown");
+      return filmCard(
+        film,
+        `${formatPercent(film.nepoBabyCount, film.castSize)} nepo babies (${film.nepoBabyCount}/${film.castSize})`,
+        names,
+      );
+    })
     .join("");
 }
 
-function renderZeroNepoFilm(films: FilmStats[]): void {
-  const [top] = films
+function renderZeroNepoFilms(films: FilmStats[]): void {
+  const top = films
     .filter((f) => f.nepoBabyCount === 0)
-    .sort((a, b) => (b.releaseYear ?? 0) - (a.releaseYear ?? 0) || b.popularity - a.popularity);
+    .sort((a, b) => (b.releaseYear ?? 0) - (a.releaseYear ?? 0) || b.popularity - a.popularity)
+    .slice(0, ZERO_NEPO_COUNT);
 
-  const container = document.getElementById("zero-nepo-film")!;
-  container.innerHTML = top ? filmCard(top, "Zero nepo babies in the cast") : "<p>No qualifying film found.</p>";
+  const container = document.getElementById("zero-nepo-films")!;
+  container.innerHTML =
+    top.length > 0 ? top.map((film) => filmCard(film, "Zero nepo babies in the cast")).join("") : "<p>No qualifying films found.</p>";
 }
 
 function renderTopParent(parents: ParentStats[]): void {
@@ -111,25 +133,25 @@ async function main() {
     <header>
       <h1>Nepo Babies Stats</h1>
       <p>Aggregate stats over the actors/films tracked by
-        <a href="https://github.com/SomeLikeItChott/nepo-babies-extension" target="_blank" rel="noopener">nepo-babies</a>.
+        <a href="https://github.com/SomeLikeItChott/nepo-babies-scraper" target="_blank" rel="noopener">nepo-baby-scraper</a>.
       </p>
     </header>
     <main>
       <section>
-        <h2>Nepo babies per film</h2>
-        <canvas id="histogram"></canvas>
-      </section>
-      <section>
-        <h2>Highest nepo-baby percentage</h2>
+        <h2>Films with highest nepo-baby percentage</h2>
         <div id="greatest-percent" class="film-grid"></div>
       </section>
       <section>
-        <h2>Most popular recent film with zero nepo babies</h2>
-        <div id="zero-nepo-film" class="film-grid"></div>
+        <h2>Most popular recent films with zero nepo babies</h2>
+        <div id="zero-nepo-films" class="film-grid"></div>
       </section>
       <section>
         <h2>Parent with the most nepo babies</h2>
         <div id="top-parent"></div>
+      </section>
+      <section>
+        <h2>Nepo babies per film</h2>
+        <canvas id="histogram"></canvas>
       </section>
     </main>
     <footer>
@@ -139,8 +161,8 @@ async function main() {
 
   const { films, parents } = await loadData();
   renderHistogram(films);
-  renderGreatestPercent(films);
-  renderZeroNepoFilm(films);
+  renderGreatestPercent(films, buildNepoBabyNameMap(parents));
+  renderZeroNepoFilms(films);
   renderTopParent(parents);
 }
 
