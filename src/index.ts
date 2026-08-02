@@ -1,13 +1,19 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fetchNepoCandidates } from "./wikidata.js";
-import { resolveLetterboxdSlug } from "./letterboxd.js";
+import { resolveLetterboxdSlug, verifyLetterboxdPageStructure } from "./letterboxd.js";
 import { searchTmdbPersonId } from "./tmdb.js";
 import { computeFilmStats } from "./films.js";
 import { computeParentStats } from "./parents.js";
 import type { NepoDataset, ResolvedRelation, UnresolvedCandidate } from "./types.js";
 
 const OUTPUT_DIR = path.join(process.cwd(), "output");
+
+// Below this, assume something's actually broken (most likely Letterboxd
+// changing their actor page markup) rather than normal fluctuation in how
+// many candidates happen to be matchable this run — historically this has
+// been well above 90%.
+const MIN_RESOLUTION_RATE = 0.5;
 
 async function main() {
   // Local dev convenience only — in CI, TMDB_API_KEY is already set as a
@@ -18,6 +24,9 @@ async function main() {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
+
+  console.log("Verifying Letterboxd's actor page structure hasn't changed...");
+  await verifyLetterboxdPageStructure();
 
   console.log("Fetching popular actors from TMDB and checking Wikidata for notable parents...");
   const { candidates, filmCasts } = await fetchNepoCandidates();
@@ -92,6 +101,18 @@ async function main() {
     `\nDone. Resolved ${Object.keys(dataset).length}/${candidates.length} ` +
       `(${unresolved.length} unresolved). Output written to ${OUTPUT_DIR}/`,
   );
+
+  // Checked after writing output, not before, so a degraded run's data is
+  // still on disk for post-mortem inspection even though this fails the
+  // step (and, in CI, triggers GitHub's existing workflow-failure
+  // notification instead of silently publishing degraded data).
+  const resolutionRate = candidates.length > 0 ? Object.keys(dataset).length / candidates.length : 1;
+  if (resolutionRate < MIN_RESOLUTION_RATE) {
+    throw new Error(
+      `Only resolved ${(resolutionRate * 100).toFixed(1)}% of candidates to a Letterboxd page ` +
+        `(expected well above 90%) — Letterboxd may have changed something. Check output/unresolved.json.`,
+    );
+  }
 }
 
 main().catch((err) => {
