@@ -39,6 +39,8 @@ nepo-baby-percentage films and the most popular recent zero-nepo-baby
 film (both with posters), and the parent with the most nepo babies in the
 dataset.
 
+<!-- TODO: screenshot of the histogram and poster grid -->
+
 ```sh
 cd site
 npm install
