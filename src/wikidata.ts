@@ -5,6 +5,7 @@ import {
   type FilmCast,
   type PopularPerson,
 } from "./tmdb.js";
+import { findRedirectUrls } from "./wikipedia.js";
 
 const ENDPOINT = "https://query.wikidata.org/sparql";
 
@@ -363,7 +364,27 @@ export async function fetchNepoCandidates(): Promise<{
   const popularActors = [...dedupedByTmdbId.values()];
 
   const resolvedActors = await resolveWikidataQids(popularActors);
-  const rawCandidates = await fetchNotableParents(resolvedActors);
+  const notableParentCandidates = await fetchNotableParents(resolvedActors);
+
+  // A parent's Wikidata sitelink can point to an enwiki page that Wikipedia
+  // later redirected elsewhere (often into a more famous relative's
+  // article) without Wikidata's sitelink metadata catching up — passing
+  // the SPARQL query above doesn't guarantee an independent article
+  // actually exists. Drop relations whose article turns out to be a
+  // redirect, and drop the candidate entirely if that was their only
+  // qualifying relation — same treatment as if Wikidata never found a
+  // notable parent for them at all. See wikipedia.ts for confirmed live
+  // examples (Rudy Giuliani, LeBron James).
+  const allWikipediaUrls = [
+    ...new Set(notableParentCandidates.flatMap((c) => c.relations.map((r) => r.wikipediaUrl))),
+  ];
+  const redirectUrls = await findRedirectUrls(allWikipediaUrls);
+  const rawCandidates = notableParentCandidates
+    .map((c) => ({
+      ...c,
+      relations: c.relations.filter((r) => !redirectUrls.has(r.wikipediaUrl)),
+    }))
+    .filter((c) => c.relations.length > 0);
 
   const allParentQids = [...new Set(rawCandidates.flatMap((c) => c.relations.map((r) => r.qid)))];
   const [occupationsByQid, parentTmdbIdByQid, parentBirthDateByQid] = await Promise.all([
