@@ -8,7 +8,14 @@ import type { NepoDataset, ResolvedRelation, UnresolvedCandidate } from "./types
 const OUTPUT_DIR = path.join(process.cwd(), "output");
 
 async function main() {
-  process.loadEnvFile();
+  // Local dev convenience only — in CI, TMDB_API_KEY is already set as a
+  // real env var (see .github/workflows/update-dataset.yml), and there's
+  // no .env file to load at all.
+  try {
+    process.loadEnvFile();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
 
   console.log("Fetching popular actors from TMDB and checking Wikidata for notable parents...");
   const candidates = await fetchNepoCandidates();
