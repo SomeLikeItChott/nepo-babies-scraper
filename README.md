@@ -1,7 +1,7 @@
 # nepo-babies scraper
 
 Offline batch job that builds a static dataset of Letterboxd actors who have a
-notable parent (a "nepo baby"). Not part of the browser extension itself —
+notable parent (a "nepo baby"). "Notable" is defined as being important enough to have your own wikipedia page. Not part of the browser extension itself —
 this is a scraper you run manually to produce `output/nepo-babies.json`,
 which the extension will eventually bundle.
 
