@@ -170,6 +170,19 @@ canvas#histogram {
   text-decoration: underline;
 }
 
+#top-parent {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  #top-parent {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
 .parent-card {
   background: color-mix(in srgb, var(--accent) 10%, var(--card-bg));
   border-left: 4px solid var(--accent);

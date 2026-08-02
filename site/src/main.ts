@@ -173,30 +173,38 @@ function renderZeroNepoFilms(films: FilmStats[]): void {
       : "<p>No qualifying films found.</p>";
 }
 
+const TOP_PARENT_COUNT = 5;
+
 function sumChildrenPopularity(parent: ParentStats): number {
   return parent.children.reduce((sum, c) => sum + c.popularity, 0);
 }
 
-function renderTopParent(parents: ParentStats[]): void {
-  const [top] = [...parents].sort((a, b) => sumChildrenPopularity(b) - sumChildrenPopularity(a));
-  const container = document.getElementById("top-parent")!;
-
-  if (!top) {
-    container.innerHTML = "<p>No parent data found.</p>";
-    return;
-  }
-
-  const childrenList = top.children.map((c) => personLink(c.name, c.wikipediaUrl)).join(", ");
-  container.innerHTML = `
+function parentCard(parent: ParentStats): string {
+  const childrenList = parent.children.map((c) => personLink(c.name, c.wikipediaUrl)).join(", ");
+  return `
     <div class="parent-card">
-      <div class="parent-name"><a href="${top.wikipediaUrl}" target="_blank" rel="noopener">${top.name}</a></div>
+      <div class="parent-name"><a href="${parent.wikipediaUrl}" target="_blank" rel="noopener">${parent.name}</a></div>
       <div class="parent-count">
-        <span class="parent-count-number">${top.children.length}</span>
+        <span class="parent-count-number">${parent.children.length}</span>
         <span class="parent-count-label">nepo babies in this dataset</span>
       </div>
       <div class="parent-children">${childrenList}</div>
     </div>
   `;
+}
+
+// Parents are tracked independently per QID (a nepo baby with both a
+// notable father and a notable mother contributes to each parent's own sum
+// separately, see computeParentStats in parents.ts), so co-parents each get
+// their own card here rather than being merged onto one.
+function renderTopParents(parents: ParentStats[]): void {
+  const top = [...parents]
+    .sort((a, b) => sumChildrenPopularity(b) - sumChildrenPopularity(a))
+    .slice(0, TOP_PARENT_COUNT);
+
+  const container = document.getElementById("top-parent")!;
+  container.innerHTML =
+    top.length > 0 ? top.map((family) => parentCard(family)).join("") : "<p>No parent data found.</p>";
 }
 
 async function main() {
@@ -230,9 +238,9 @@ async function main() {
         <div id="zero-nepo-films" class="film-grid"></div>
       </section>
       <section class="section-hero">
-        <h2>Nepo parent with the most popular children</h2>
+        <h2>Nepo parents with the most popular children</h2>
         <p class="section-note">
-          The parent whose nepo-baby children have the highest combined popularity, as ranked by TMDB.
+          The parents whose nepo-baby children have the highest combined popularity, as ranked by TMDB.
         </p>
         <div id="top-parent"></div>
       </section>
@@ -251,7 +259,7 @@ async function main() {
   renderHistogram(displayFilms);
   renderGreatestPercent(displayFilms, buildNepoBabyMap(parents));
   renderZeroNepoFilms(displayFilms);
-  renderTopParent(parents);
+  renderTopParents(parents);
 }
 
 main().catch((err) => {
