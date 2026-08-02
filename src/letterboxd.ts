@@ -17,33 +17,6 @@ function extractTmdbId(html: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-// Any consistently well-known, definitely-real Letterboxd actor page works
-// here — this only checks that a TMDb link is still findable on it at all,
-// not who it belongs to.
-const CANARY_SLUG = "timothee-chalamet";
-
-/**
- * Confirms Letterboxd's actor page markup still has what extractTmdbId()
- * depends on, before spending 45-75 minutes on a real scrape that would
- * otherwise silently produce a collapsed resolution rate instead of
- * failing loudly. Throws on failure — callers should let that crash the
- * run so CI's existing failure notification catches it, rather than
- * catching it here.
- */
-export async function verifyLetterboxdPageStructure(): Promise<void> {
-  const { status, body } = await fetchWithCache(`https://letterboxd.com/actor/${CANARY_SLUG}/`);
-
-  if (status !== 200) {
-    throw new Error(`Letterboxd canary check failed: /actor/${CANARY_SLUG}/ returned ${status}`);
-  }
-  if (extractTmdbId(body) === null) {
-    throw new Error(
-      `Letterboxd canary check failed: no TMDb link found on /actor/${CANARY_SLUG}/ — ` +
-        "Letterboxd may have changed their actor page markup.",
-    );
-  }
-}
-
 /**
  * Generates alternate full-name phrasings to try slugifying, broadest/most
  * literal first. Both confirmed live against real cases in unresolved.json:

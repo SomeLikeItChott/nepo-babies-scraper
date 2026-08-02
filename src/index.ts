@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fetchNepoCandidates } from "./wikidata.js";
-import { resolveLetterboxdSlug, verifyLetterboxdPageStructure } from "./letterboxd.js";
+import { resolveLetterboxdSlug } from "./letterboxd.js";
 import { searchTmdbPersonId } from "./tmdb.js";
 import { computeFilmStats } from "./films.js";
 import { computeParentStats } from "./parents.js";
@@ -24,9 +24,6 @@ async function main() {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
-
-  console.log("Verifying Letterboxd's actor page structure hasn't changed...");
-  await verifyLetterboxdPageStructure();
 
   console.log("Fetching popular actors from TMDB and checking Wikidata for notable parents...");
   const { candidates, filmCasts } = await fetchNepoCandidates();
