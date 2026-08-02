@@ -100,6 +100,16 @@ SELECT ?person ?personTmdb WHERE {
 `.trim();
 }
 
+function buildBirthDateQuery(qids: string[]): string {
+  const values = qids.map((qid) => `wd:${qid}`).join(" ");
+  return `
+SELECT ?person ?birthDate WHERE {
+  VALUES ?person { ${values} }
+  ?person wdt:P569 ?birthDate .
+}
+`.trim();
+}
+
 interface QidLookupBinding {
   person: { value: string };
   personTmdb: { value: string };
@@ -123,6 +133,11 @@ interface OccupationBinding {
 interface ParentTmdbIdBinding {
   person: { value: string };
   personTmdb: { value: string };
+}
+
+interface BirthDateBinding {
+  person: { value: string };
+  birthDate: { value: string };
 }
 
 interface SparqlResponse<T> {
@@ -304,6 +319,32 @@ async function fetchTmdbIdsByQid(qids: string[]): Promise<Map<string, number>> {
   return tmdbIdByQid;
 }
 
+/**
+ * Batch-fetches each parent's date of birth (P569), if Wikidata has one —
+ * used as a disambiguation signal in searchTmdbPersonId()'s fallback
+ * (index.ts), since an exact name match on TMDB doesn't guarantee it's the
+ * same real person. Confirmed live: Woody Harrelson's father Charles
+ * Harrelson — not a film-industry person, so no P4985 — has an exact
+ * namesake on TMDB (a different, unrelated actor) that a name-only search
+ * would confidently but wrongly link to.
+ */
+async function fetchBirthDatesByQid(qids: string[]): Promise<Map<string, string>> {
+  const birthDateByQid = new Map<string, string>();
+
+  for (const [i, batch] of chunk(qids, VALUES_BATCH_SIZE).entries()) {
+    if (i > 0) await sleep(300);
+
+    const bindings = await runQuery<BirthDateBinding>(buildBirthDateQuery(batch));
+    for (const b of bindings) {
+      // Wikidata returns a full dateTime literal (e.g. "1938-07-23T00:00:00Z");
+      // only the date part is comparable against TMDB's "YYYY-MM-DD" birthday field.
+      birthDateByQid.set(qidFromUri(b.person.value), b.birthDate.value.split("T")[0]);
+    }
+  }
+
+  return birthDateByQid;
+}
+
 export async function fetchNepoCandidates(): Promise<NepoCandidate[]> {
   const [popularPeople, movieCastPeople] = await Promise.all([
     fetchPopularActorsFromTmdb(TARGET_ACTOR_COUNT),
@@ -320,9 +361,10 @@ export async function fetchNepoCandidates(): Promise<NepoCandidate[]> {
   const rawCandidates = await fetchNotableParents(resolvedActors);
 
   const allParentQids = [...new Set(rawCandidates.flatMap((c) => c.relations.map((r) => r.qid)))];
-  const [occupationsByQid, parentTmdbIdByQid] = await Promise.all([
+  const [occupationsByQid, parentTmdbIdByQid, parentBirthDateByQid] = await Promise.all([
     fetchOccupationsByQid(allParentQids),
     fetchTmdbIdsByQid(allParentQids),
+    fetchBirthDatesByQid(allParentQids),
   ]);
 
   return rawCandidates.map((c) => ({
@@ -333,6 +375,7 @@ export async function fetchNepoCandidates(): Promise<NepoCandidate[]> {
       name: r.name,
       occupations: occupationsByQid.get(r.qid) ?? [],
       tmdbId: parentTmdbIdByQid.get(r.qid),
+      birthDate: parentBirthDateByQid.get(r.qid),
       wikipediaUrl: r.wikipediaUrl,
     })),
   }));

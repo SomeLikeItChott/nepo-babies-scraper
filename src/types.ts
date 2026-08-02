@@ -7,6 +7,8 @@ export interface CandidateRelation {
   occupations: string[];
   /** This parent's own TMDb id (P4985), if Wikidata has one — used to resolve their Letterboxd slug. */
   tmdbId?: number;
+  /** This parent's date of birth (P569), as "YYYY-MM-DD", if Wikidata has one — used to disambiguate same-named TMDB people when tmdbId is missing (see searchTmdbPersonId). */
+  birthDate?: string;
   /** English Wikipedia article URL for this parent — always present, since having one is the inclusion criterion. */
   wikipediaUrl: string;
 }

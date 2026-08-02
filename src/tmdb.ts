@@ -160,6 +160,16 @@ function normalizeName(name: string): string {
   return name.trim().toLowerCase();
 }
 
+interface TmdbPersonDetail {
+  id: number;
+  birthday: string | null;
+}
+
+async function fetchTmdbPersonBirthday(id: number): Promise<string | null> {
+  const data = await tmdbFetch<TmdbPersonDetail>(`/person/${id}`, { language: "en-US" });
+  return data.birthday;
+}
+
 /**
  * Finds a TMDb id for a person by name via /search/person, for the case
  * where Wikidata has no wdt:P4985 for them at all — a real, common gap for
@@ -167,18 +177,41 @@ function normalizeName(name: string): string {
  * that property is far less consistently populated for them on Wikidata
  * than it is for actors (confirmed live: several real director/producer
  * parents in this dataset had no P4985 despite clearly having TMDB pages).
- * Only accepts an exact (case-insensitive) name match against a result to
- * avoid confidently linking to the wrong same-ish-named person — TMDB's
- * search can return close-but-different matches (e.g. "Ram Mukherjee" vs
- * "Ram Kamal Mukherjee"). A missed match here just means no link is added,
- * which is the same as today's behavior, not a worse outcome.
+ *
+ * Only accepts an exact (case-insensitive) name match — but an exact name
+ * match alone isn't enough to guarantee the same real person, since two
+ * different people can share an exact name, not just a similar one
+ * (confirmed live: Woody Harrelson's father Charles Harrelson — not a
+ * film-industry person, so no P4985 — has an exact TMDB namesake who is a
+ * different, unrelated actor). When Wikidata has a birth date (P569) for
+ * this person, expectedBirthDate cross-checks it against each exact-name
+ * candidate's TMDB `birthday` and only returns a match if exactly one
+ * candidate's birthday agrees. Without a birth date to check against,
+ * falls back to requiring the name match to be unique among the results —
+ * multiple same-named candidates with nothing to disambiguate them means
+ * no confident match, same as no match at all, not a worse outcome.
  */
-export async function searchTmdbPersonId(name: string): Promise<number | null> {
+export async function searchTmdbPersonId(
+  name: string,
+  expectedBirthDate?: string,
+): Promise<number | null> {
   const data = await tmdbFetch<TmdbPersonSearchResponse>("/search/person", {
     query: name,
     language: "en-US",
   });
 
-  const match = data.results.find((r) => normalizeName(r.name) === normalizeName(name));
-  return match ? match.id : null;
+  const exactMatches = data.results.filter((r) => normalizeName(r.name) === normalizeName(name));
+
+  if (!expectedBirthDate) {
+    return exactMatches.length === 1 ? exactMatches[0].id : null;
+  }
+
+  const birthdayMatches: TmdbPersonSearchResult[] = [];
+  for (const [i, candidate] of exactMatches.entries()) {
+    if (i > 0) await sleep(REQUEST_DELAY_MS);
+    const birthday = await fetchTmdbPersonBirthday(candidate.id);
+    if (birthday === expectedBirthDate) birthdayMatches.push(candidate);
+  }
+
+  return birthdayMatches.length === 1 ? birthdayMatches[0].id : null;
 }

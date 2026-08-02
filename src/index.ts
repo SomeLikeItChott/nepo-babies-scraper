@@ -33,17 +33,20 @@ async function main() {
     // (directors, producers, screenwriters) than for actors — confirmed
     // live against real parents in this dataset who had genuine Letterboxd
     // pages despite no P4985 at all. When Wikidata doesn't have one, fall
-    // back to searching TMDB directly by name (searchTmdbPersonId only
-    // accepts an exact name match, to avoid confidently linking the wrong
-    // same-ish-named person). Some notable parents (politicians, musicians
-    // with no film/TV career) still won't resolve either way, and that's
-    // expected — they fall back to wikipediaUrl. Repeated names across
-    // candidates (e.g. a parent who's also a popular actor elsewhere in
-    // this run, or shared by sibling actors) hit letterboxd.ts's on-disk
-    // cache and resolve near-instantly.
+    // back to searching TMDB directly by name, cross-checked against the
+    // parent's Wikidata birth date where available (searchTmdbPersonId's
+    // doc comment covers why a name match alone isn't sufficient). Some
+    // notable parents (politicians, musicians with no film/TV career) still
+    // won't resolve either way, and that's expected — they fall back to
+    // wikipediaUrl. Repeated names across candidates (e.g. a parent who's
+    // also a popular actor elsewhere in this run, or shared by sibling
+    // actors) hit letterboxd.ts's on-disk cache and resolve near-instantly.
     const relations: ResolvedRelation[] = [];
     for (const relation of candidate.relations) {
-      const parentTmdbId = relation.tmdbId ?? (await searchTmdbPersonId(relation.name)) ?? undefined;
+      const parentTmdbId =
+        relation.tmdbId ??
+        (await searchTmdbPersonId(relation.name, relation.birthDate)) ??
+        undefined;
       const letterboxdSlug = parentTmdbId
         ? (await resolveLetterboxdSlug(relation.name, parentTmdbId)) ?? undefined
         : undefined;
