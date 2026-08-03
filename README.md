@@ -34,7 +34,7 @@ Letterboxd (matching actors and parents to their profile pages).
 ## Stats site
 
 [`site/`](site/) is a small Vite + TypeScript static site showing
-aggregate stats over the dataset.
+aggregate stats over the dataset. Hosted at https://somelikeitchott.github.io/nepo-babies-scraper/.
 
 <!-- TODO: screenshot of the site -->
 
