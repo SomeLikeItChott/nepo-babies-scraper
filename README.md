@@ -1,4 +1,4 @@
-# nepo-babies scraper
+# nepo-babies-scraper
 
 Builds a dataset of Letterboxd actors with a notable parent (a "nepo
 baby") — "notable" meaning they have their own Wikipedia page. Powers the
