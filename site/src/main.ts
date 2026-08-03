@@ -173,7 +173,7 @@ function renderZeroNepoFilms(films: FilmStats[]): void {
       : "<p>No qualifying films found.</p>";
 }
 
-const TOP_PARENT_COUNT = 5;
+const TOP_PARENT_COUNT = 6;
 
 function sumChildrenPopularity(parent: ParentStats): number {
   return parent.children.reduce((sum, c) => sum + c.popularity, 0);
