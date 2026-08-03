@@ -25,6 +25,13 @@ function isReleased(film: FilmStats): boolean {
   return !film.releaseDate || new Date(film.releaseDate) <= new Date();
 }
 
+function isWithinPastYear(film: FilmStats): boolean {
+  if (!film.releaseDate) return false;
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  return new Date(film.releaseDate) >= oneYearAgo;
+}
+
 async function loadData(): Promise<{ films: FilmStats[]; parents: ParentStats[] }> {
   const [filmsRes, parentsRes] = await Promise.all([fetch("./films.json"), fetch("./parents.json")]);
   const [films, parents] = await Promise.all([filmsRes.json(), parentsRes.json()]);
@@ -141,23 +148,26 @@ function buildNepoBabyMap(parents: ParentStats[]): Map<number, NepoBaby> {
   return babies;
 }
 
-function renderGreatestPercent(films: FilmStats[], nepoBabies: Map<number, NepoBaby>): void {
+function renderGreatestPercent(films: FilmStats[], nepoBabies: Map<number, NepoBaby>, containerId: string): void {
   const ranked = films
     .filter((f) => f.castSize > 0)
     .map((f) => ({ film: f, percent: f.nepoBabyCount / f.castSize }))
     .sort((a, b) => b.percent - a.percent)
     .slice(0, GREATEST_PERCENT_COUNT);
 
-  const container = document.getElementById("greatest-percent")!;
-  container.innerHTML = ranked
-    .map(({ film }) => {
-      const babies = film.nepoBabyTmdbIds.map((id) => nepoBabies.get(id) ?? { name: "Unknown" });
-      return filmCard(film, {
-        caption: `<strong>${formatPercent(film.nepoBabyCount, film.castSize)}</strong> nepo babies (${film.nepoBabyCount}/${film.castSize})`,
-        nepoBabies: babies,
-      });
-    })
-    .join("");
+  const container = document.getElementById(containerId)!;
+  container.innerHTML =
+    ranked.length > 0
+      ? ranked
+          .map(({ film }) => {
+            const babies = film.nepoBabyTmdbIds.map((id) => nepoBabies.get(id) ?? { name: "Unknown" });
+            return filmCard(film, {
+              caption: `<strong>${formatPercent(film.nepoBabyCount, film.castSize)}</strong> nepo babies (${film.nepoBabyCount}/${film.castSize})`,
+              nepoBabies: babies,
+            });
+          })
+          .join("")
+      : "<p>No qualifying films found.</p>";
 }
 
 function renderZeroNepoFilms(films: FilmStats[]): void {
@@ -230,8 +240,12 @@ async function main() {
     </header>
     <main>
       <section>
-        <h2>Films with highest nepo-baby percentage</h2>
+        <h2>Films in dataset with highest nepo-baby percentage</h2>
         <div id="greatest-percent" class="film-grid"></div>
+      </section>
+      <section>
+        <h2>Highest nepo baby percentage in films from the past year</h2>
+        <div id="recent-greatest-percent" class="film-grid"></div>
       </section>
       <section>
         <h2>Most popular recent films with zero nepo babies</h2>
@@ -256,8 +270,10 @@ async function main() {
 
   const { films, parents } = await loadData();
   const displayFilms = selectDisplayFilms(films);
+  const nepoBabies = buildNepoBabyMap(parents);
   renderHistogram(displayFilms);
-  renderGreatestPercent(displayFilms, buildNepoBabyMap(parents));
+  renderGreatestPercent(displayFilms.filter(isWithinPastYear), nepoBabies, "recent-greatest-percent");
+  renderGreatestPercent(displayFilms, nepoBabies, "greatest-percent");
   renderZeroNepoFilms(displayFilms);
   renderTopParents(parents);
 }
