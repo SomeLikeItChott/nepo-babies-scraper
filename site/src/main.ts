@@ -186,9 +186,12 @@ function renderYearlyPercentage(years: YearStats[]): void {
         tooltip: {
           callbacks: {
             label: (ctx) => {
-              const topNames = years[ctx.dataIndex].topNepoBabies.map((b) => b.name).join(", ");
+              const year = years[ctx.dataIndex];
               const pct = `${(ctx.parsed.y ?? 0).toFixed(1)}%`;
-              return topNames ? `${pct} — top: ${topNames}` : pct;
+              const lines = [`${pct} of cast (${year.filmCount} movies considered)`];
+              const topNames = year.topNepoBabies.map((b) => b.name).join(", ");
+              if (topNames) lines.push(`Top: ${topNames}`);
+              return lines;
             },
           },
         },
@@ -304,10 +307,11 @@ function sumChildrenPopularity(parent: ParentStats): number {
 }
 
 function parentCard(parent: ParentStats): string {
+  const parentNames = parent.parents.map((p) => personLink(p.name, p.wikipediaUrl)).join(" &amp; ");
   const childrenList = parent.children.map((c) => personLink(c.name, c.wikipediaUrl)).join(", ");
   return `
     <div class="parent-card">
-      <div class="parent-name"><a href="${parent.wikipediaUrl}" target="_blank" rel="noopener">${parent.name}</a></div>
+      <div class="parent-name">${parentNames}</div>
       <div class="parent-count">
         <span class="parent-count-number">${parent.children.length}</span>
         <span class="parent-count-label">nepo babies in this dataset</span>
@@ -317,10 +321,10 @@ function parentCard(parent: ParentStats): string {
   `;
 }
 
-// Parents are tracked independently per QID (a nepo baby with both a
-// notable father and a notable mother contributes to each parent's own sum
-// separately, see computeParentStats in parents.ts), so co-parents each get
-// their own card here rather than being merged onto one.
+// Couples who co-parented at least one nepo baby together are already
+// merged onto one entry by computeParentStats (parents.ts) — a parent with
+// children from more than one notable partner (or some shared, some not)
+// can still show up on more than one card here, once per distinct pairing.
 function renderTopParents(parents: ParentStats[]): void {
   const top = [...parents]
     .sort((a, b) => sumChildrenPopularity(b) - sumChildrenPopularity(a))
@@ -382,10 +386,7 @@ async function main() {
       </section>
       <section>
         <h2>Nepo baby percentage by year</h2>
-        <p class="section-note">
-          Across the full historical TMDB/Wikidata dataset (movies with at least 50 votes) —
-          not just the current-week popular subset the sections above are drawn from.
-        </p>
+        <p class="section-note">Considering only movies with more than 50 ratings on TMDB</p>
         <div id="yearly-percentage"></div>
       </section>
     </main>

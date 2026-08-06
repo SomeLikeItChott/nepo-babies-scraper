@@ -17,10 +17,8 @@ export interface FilmStats {
 }
 
 export interface ParentStats {
-  wikidataQid: string;
-  name: string;
-  wikipediaUrl: string;
-  occupations: string[];
+  /** One entry for a solo parent, two for a couple — see computeParentStats in ../../src/parents.ts. */
+  parents: { wikidataQid: string; name: string; wikipediaUrl: string; occupations: string[] }[];
   children: { name: string; tmdbId: number; popularity: number; wikipediaUrl?: string }[];
 }
 
