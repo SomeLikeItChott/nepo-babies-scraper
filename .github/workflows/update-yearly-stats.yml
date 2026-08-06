@@ -1,0 +1,101 @@
+name: Update yearly stats
+
+on:
+  schedule:
+    # Weekly, Monday 07:00 UTC — an hour after update-dataset.yml, so the two
+    # don't race on publishing to gh-pages. Cheap to run this often because
+    # it defaults to refreshing only the current year (see yearly-stats.ts) —
+    # not the full-catalog scan a real historical backfill needs.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: >
+          Override start year for a backfill (e.g. 1900 for the full
+          historical catalog). Leave blank for the normal, fast
+          current-year-only refresh. For a full backfill, prefer several
+          runs each covering a decade or two (set end_year too) over one
+          multi-hour run — this job has no checkpointing, so a failure
+          partway through a long run loses all of it, not just the tail.
+        required: false
+      end_year:
+        description: >
+          Override end year, paired with start_year for chunking a
+          backfill (e.g. start_year=1970, end_year=1979). Leave blank to
+          default to the current year.
+        required: false
+
+# GITHUB_TOKEN defaults to read-only repo contents; peaceiris/actions-gh-pages
+# needs write access to push the gh-pages branch.
+permissions:
+  contents: write
+
+jobs:
+  update-yearly-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Persists .cache/nepo-baby-checks.json (see nepo-baby-cache.ts) across
+      # runs — GitHub Actions runners are otherwise a fresh checkout every
+      # time, so without this every run would be a cold-cache run, hitting
+      # Wikidata for the full actor pool instead of just newly-seen actors.
+      # The key always misses (github.run_id is unique per run) so this
+      # always saves a fresh cache at the end of the job; restore-keys then
+      # falls back to the most recent previous one on the next run — the
+      # standard actions/cache pattern for a cache that only ever grows.
+      - name: Restore Wikidata nepo-baby cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/nepo-baby-checks.json
+          key: nepo-baby-cache-${{ github.run_id }}
+          restore-keys: nepo-baby-cache-
+
+      # yearly-stats.ts merges its fresh result into whatever's already in
+      # output/yearly-stats.json rather than recomputing history every run
+      # (see its doc comments) — but output/ isn't committed to the repo
+      # (same as the rest of output/, see .gitignore), so each fresh CI
+      # checkout needs the last published copy restored here first. Ignored
+      # if gh-pages or the file doesn't exist yet (e.g. the very first run).
+      - name: Restore previously published yearly stats
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-prev
+        continue-on-error: true
+
+      - name: Seed output/ with the previous copy
+        run: |
+          mkdir -p output
+          cp gh-pages-prev/yearly-stats.json output/yearly-stats.json 2>/dev/null || true
+
+      - name: Run yearly stats scraper
+        run: npm run scrape:yearly
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          YEARLY_STATS_START_YEAR: ${{ github.event.inputs.start_year }}
+          YEARLY_STATS_END_YEAR: ${{ github.event.inputs.end_year }}
+
+      - name: Stage file for Pages publish
+        run: |
+          mkdir -p public
+          cp output/yearly-stats.json public/yearly-stats.json
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          # This job only stages yearly-stats.json — without this, publishing
+          # would delete the site and extension data update-dataset.yml
+          # publishes to the same branch separately.
+          keep_files: true

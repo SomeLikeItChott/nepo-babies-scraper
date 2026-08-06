@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "scrape": "tsx src/index.ts",
+    "scrape:yearly": "tsx src/yearly-stats.ts",
     "gzip-output": "node scripts/gzip-output.js",
+    "sync-site-data": "node scripts/sync-site-data.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

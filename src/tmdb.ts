@@ -136,6 +136,18 @@ export interface FilmCast {
  * so the resulting pool is intentionally much larger than
  * fetchPopularActors' output.
  */
+/**
+ * Fetches one movie's full cast via `/movie/{id}/credits` — no billing-order
+ * cutoff (see fetchPopularMovieCast's doc comment for why), just the whole
+ * list TMDB returns.
+ */
+export async function fetchMovieCredits(movieId: number): Promise<PopularPerson[]> {
+  const credits = await tmdbFetch<TmdbCreditsResponse>(`/movie/${movieId}/credits`, {
+    language: "en-US",
+  });
+  return credits.cast.map((member) => ({ tmdbId: member.id, name: member.name, popularity: member.popularity }));
+}
+
 export async function fetchPopularMovieCast(movieCount: number): Promise<FilmCast[]> {
   const films: FilmCast[] = [];
   const seenMovieIds = new Set<number>();
@@ -158,9 +170,7 @@ export async function fetchPopularMovieCast(movieCount: number): Promise<FilmCas
       if (seenMovieIds.has(movie.id)) continue;
       seenMovieIds.add(movie.id);
 
-      const credits = await tmdbFetch<TmdbCreditsResponse>(`/movie/${movie.id}/credits`, {
-        language: "en-US",
-      });
+      const cast = await fetchMovieCredits(movie.id);
       films.push({
         tmdbId: movie.id,
         title: movie.title,
@@ -168,7 +178,7 @@ export async function fetchPopularMovieCast(movieCount: number): Promise<FilmCas
         releaseYear: movie.release_date ? Number(movie.release_date.slice(0, 4)) : null,
         releaseDate: movie.release_date || null,
         popularity: movie.popularity,
-        cast: credits.cast.map((member) => ({ tmdbId: member.id, name: member.name, popularity: member.popularity })),
+        cast,
       });
 
       await sleep(REQUEST_DELAY_MS);
@@ -178,6 +188,61 @@ export async function fetchPopularMovieCast(movieCount: number): Promise<FilmCas
   }
 
   return films;
+}
+
+export interface DiscoveredMovie {
+  tmdbId: number;
+  title: string;
+  voteCount: number;
+}
+
+interface TmdbDiscoverMovie {
+  id: number;
+  title: string;
+  vote_count: number;
+}
+
+interface TmdbDiscoverResponse {
+  results: TmdbDiscoverMovie[];
+  total_pages: number;
+}
+
+/**
+ * Fetches every movie TMDB has for a given calendar year at or above a
+ * minimum vote count, via `/discover/movie` filtered by `primary_release_year`
+ * (TMDB's single canonical release year per movie) rather than `release_date`
+ * (which matches against *any* regional/re-release date a movie has and would
+ * double-count the same movie across multiple years). Querying one year at a
+ * time also sidesteps the same 500-page/10,000-result cap noted on
+ * fetchPopularActors above — each year gets its own budget.
+ */
+export async function discoverMoviesByYear(
+  year: number,
+  minVoteCount: number,
+): Promise<DiscoveredMovie[]> {
+  const movies: DiscoveredMovie[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const data = await tmdbFetch<TmdbDiscoverResponse>("/discover/movie", {
+      primary_release_year: String(year),
+      "vote_count.gte": String(minVoteCount),
+      sort_by: "vote_count.desc",
+      language: "en-US",
+      page: String(page),
+    });
+
+    for (const movie of data.results) {
+      movies.push({ tmdbId: movie.id, title: movie.title, voteCount: movie.vote_count });
+    }
+
+    totalPages = Math.min(data.total_pages, MAX_TMDB_PAGE);
+    page++;
+    if (page <= totalPages) await sleep(REQUEST_DELAY_MS);
+  } while (page <= totalPages);
+
+  return movies;
 }
 
 interface TmdbPersonSearchResult {

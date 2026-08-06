@@ -214,7 +214,16 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-interface PopularActor {
+// Each batched query below only takes a couple hundred ms to a few seconds,
+// but at the scale of tens of thousands of actors that's still enough
+// batches that a run can go quiet for tens of minutes with no visible
+// progress — confirmed live on a 5-year yearly-stats test run. This is
+// cheap insurance against that, not a serious progress bar.
+function logBatchProgress(label: string, batchIndex: number, totalBatches: number): void {
+  console.log(`  [wikidata] ${label}: batch ${batchIndex + 1}/${totalBatches}`);
+}
+
+export interface PopularActor {
   qid: string;
   name: string;
   tmdbId: number;
@@ -227,12 +236,14 @@ interface PopularActor {
  * every popular TMDb actor has a Wikidata item with that property filled
  * in, so the result is a subset of the input.
  */
-async function resolveWikidataQids(people: PopularPerson[]): Promise<PopularActor[]> {
+export async function resolveWikidataQids(people: PopularPerson[]): Promise<PopularActor[]> {
   const byTmdbId = new Map(people.map((p) => [String(p.tmdbId), p]));
   const resolved: PopularActor[] = [];
 
-  for (const [i, batch] of chunk([...byTmdbId.keys()], VALUES_BATCH_SIZE).entries()) {
+  const batches = chunk([...byTmdbId.keys()], VALUES_BATCH_SIZE);
+  for (const [i, batch] of batches.entries()) {
     if (i > 0) await sleep(300);
+    logBatchProgress("resolving actor QIDs", i, batches.length);
 
     const bindings = await runQuery<QidLookupBinding>(buildQidLookupQuery(batch));
     for (const b of bindings) {
@@ -257,7 +268,7 @@ interface RawRelation {
   wikipediaUrl: string;
 }
 
-interface RawCandidate {
+export interface RawCandidate {
   qid: string;
   name: string;
   tmdbId: number;
@@ -266,12 +277,14 @@ interface RawCandidate {
   relations: RawRelation[];
 }
 
-async function fetchNotableParents(actors: PopularActor[]): Promise<RawCandidate[]> {
+export async function fetchNotableParents(actors: PopularActor[]): Promise<RawCandidate[]> {
   const byQid = new Map(actors.map((a) => [a.qid, a]));
   const candidates: RawCandidate[] = [];
 
-  for (const [i, batch] of chunk(actors.map((a) => a.qid), VALUES_BATCH_SIZE).entries()) {
+  const batches = chunk(actors.map((a) => a.qid), VALUES_BATCH_SIZE);
+  for (const [i, batch] of batches.entries()) {
     if (i > 0) await sleep(300);
+    logBatchProgress("checking for notable parents", i, batches.length);
 
     const bindings = await runQuery<NotableParentBinding>(buildNotableParentsQuery(batch));
     for (const b of bindings) {
@@ -312,8 +325,10 @@ async function fetchNotableParents(actors: PopularActor[]): Promise<RawCandidate
 async function fetchOccupationsByQid(qids: string[]): Promise<Map<string, string[]>> {
   const occupationsByQid = new Map<string, string[]>();
 
-  for (const [i, batch] of chunk(qids, VALUES_BATCH_SIZE).entries()) {
+  const batches = chunk(qids, VALUES_BATCH_SIZE);
+  for (const [i, batch] of batches.entries()) {
     if (i > 0) await sleep(300);
+    logBatchProgress("fetching parent occupations", i, batches.length);
 
     const bindings = await runQuery<OccupationBinding>(buildOccupationQuery(batch));
     for (const b of bindings) {
@@ -338,8 +353,10 @@ async function fetchOccupationsByQid(qids: string[]): Promise<Map<string, string
 async function fetchTmdbIdsByQid(qids: string[]): Promise<Map<string, number>> {
   const tmdbIdByQid = new Map<string, number>();
 
-  for (const [i, batch] of chunk(qids, VALUES_BATCH_SIZE).entries()) {
+  const batches = chunk(qids, VALUES_BATCH_SIZE);
+  for (const [i, batch] of batches.entries()) {
     if (i > 0) await sleep(300);
+    logBatchProgress("fetching parent TMDB ids", i, batches.length);
 
     const bindings = await runQuery<ParentTmdbIdBinding>(buildParentTmdbIdQuery(batch));
     for (const b of bindings) {
@@ -362,8 +379,10 @@ async function fetchTmdbIdsByQid(qids: string[]): Promise<Map<string, number>> {
 async function fetchBirthDatesByQid(qids: string[]): Promise<Map<string, string>> {
   const birthDateByQid = new Map<string, string>();
 
-  for (const [i, batch] of chunk(qids, VALUES_BATCH_SIZE).entries()) {
+  const batches = chunk(qids, VALUES_BATCH_SIZE);
+  for (const [i, batch] of batches.entries()) {
     if (i > 0) await sleep(300);
+    logBatchProgress("fetching parent birth dates", i, batches.length);
 
     const bindings = await runQuery<BirthDateBinding>(buildBirthDateQuery(batch));
     for (const b of bindings) {
@@ -384,11 +403,13 @@ async function fetchBirthDatesByQid(qids: string[]): Promise<Map<string, string>
  * of the input; the caller still needs to redirect-check the results the
  * same way parent articles are (see findRedirectUrls in wikipedia.ts).
  */
-async function fetchWikipediaUrlsByQid(qids: string[]): Promise<Map<string, string>> {
+export async function fetchWikipediaUrlsByQid(qids: string[]): Promise<Map<string, string>> {
   const urlByQid = new Map<string, string>();
 
-  for (const [i, batch] of chunk(qids, VALUES_BATCH_SIZE).entries()) {
+  const batches = chunk(qids, VALUES_BATCH_SIZE);
+  for (const [i, batch] of batches.entries()) {
     if (i > 0) await sleep(300);
+    logBatchProgress("fetching Wikipedia URLs", i, batches.length);
 
     const bindings = await runQuery<WikipediaUrlBinding>(buildWikipediaUrlQuery(batch));
     for (const b of bindings) {

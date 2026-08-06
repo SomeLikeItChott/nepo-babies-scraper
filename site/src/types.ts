@@ -23,3 +23,13 @@ export interface ParentStats {
   occupations: string[];
   children: { name: string; tmdbId: number; popularity: number; wikipediaUrl?: string }[];
 }
+
+// Mirrors YearStats in ../../src/yearly-stats.ts.
+export interface YearStats {
+  year: number;
+  filmCount: number;
+  castSize: number;
+  nepoBabyCount: number;
+  leastVotedFilm: { tmdbId: number; title: string; voteCount: number } | null;
+  topNepoBabies: { tmdbId: number; name: string; popularity: number; wikipediaUrl?: string }[];
+}

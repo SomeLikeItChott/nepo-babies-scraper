@@ -94,7 +94,8 @@ h2 {
   padding-bottom: 0.5rem;
 }
 
-canvas#histogram {
+canvas#histogram,
+canvas#yearly-percentage-chart {
   max-width: 100%;
 }
 
