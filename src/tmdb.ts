@@ -106,6 +106,7 @@ interface TmdbCastMember {
   id: number;
   name: string;
   popularity: number;
+  order: number;
 }
 
 interface TmdbCreditsResponse {
@@ -123,6 +124,36 @@ export interface FilmCast {
 }
 
 /**
+ * A cast member plus their billing position in that specific movie's
+ * credits (0 = top-billed). Separate from PopularPerson (which
+ * fetchPopularActors also returns) since billing order is a property of a
+ * *credit*, not of the person themselves — the same person has a different
+ * order in every movie they're in.
+ */
+export interface CastCredit extends PopularPerson {
+  order: number;
+}
+
+/**
+ * Fetches one movie's full cast via `/movie/{id}/credits` — no billing-order
+ * cutoff (see fetchPopularMovieCast's doc comment for why), just the whole
+ * list TMDB returns. Falls back to a large order for the rare credit
+ * missing one (observed as `null` for some archival/uncredited entries)
+ * rather than letting it sort as if top-billed.
+ */
+export async function fetchMovieCredits(movieId: number): Promise<CastCredit[]> {
+  const credits = await tmdbFetch<TmdbCreditsResponse>(`/movie/${movieId}/credits`, {
+    language: "en-US",
+  });
+  return credits.cast.map((member) => ({
+    tmdbId: member.id,
+    name: member.name,
+    popularity: member.popularity,
+    order: member.order ?? 9999,
+  }));
+}
+
+/**
  * Fetches the full cast of the top `movieCount` popular movies
  * (`/movie/popular`, 20/page, then one `/movie/{id}/credits` call per
  * movie), keeping each movie's cast grouped under it (title/poster/
@@ -136,18 +167,6 @@ export interface FilmCast {
  * so the resulting pool is intentionally much larger than
  * fetchPopularActors' output.
  */
-/**
- * Fetches one movie's full cast via `/movie/{id}/credits` — no billing-order
- * cutoff (see fetchPopularMovieCast's doc comment for why), just the whole
- * list TMDB returns.
- */
-export async function fetchMovieCredits(movieId: number): Promise<PopularPerson[]> {
-  const credits = await tmdbFetch<TmdbCreditsResponse>(`/movie/${movieId}/credits`, {
-    language: "en-US",
-  });
-  return credits.cast.map((member) => ({ tmdbId: member.id, name: member.name, popularity: member.popularity }));
-}
-
 export async function fetchPopularMovieCast(movieCount: number): Promise<FilmCast[]> {
   const films: FilmCast[] = [];
   const seenMovieIds = new Set<number>();

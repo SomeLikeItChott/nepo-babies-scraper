@@ -29,5 +29,11 @@ export interface YearStats {
   castSize: number;
   nepoBabyCount: number;
   leastVotedFilm: { tmdbId: number; title: string; voteCount: number } | null;
-  topNepoBabies: { tmdbId: number; name: string; popularity: number; wikipediaUrl?: string }[];
+  topNepoBabies: {
+    tmdbId: number;
+    name: string;
+    popularity: number;
+    wikipediaUrl?: string;
+    bestFilm: { tmdbId: number; title: string; voteCount: number; order: number };
+  }[];
 }

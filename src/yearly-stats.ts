@@ -32,11 +32,36 @@ interface LeastVotedFilm {
   voteCount: number;
 }
 
+interface BestFilmAppearance {
+  tmdbId: number;
+  title: string;
+  voteCount: number;
+  order: number;
+}
+
+/**
+ * Ranks a specific credit by how much it should count as "a big year" for
+ * that actor — the movie's vote count, discounted by how far down the
+ * billing they were (order 0 = lead, full credit; order 30 = deep in an
+ * ensemble, ~3% credit). A live person-popularity snapshot (the previous
+ * approach) doesn't vary by year at all — the same actor with the same
+ * qualifying credit shows up as "top" in every year they have one,
+ * regardless of how substantial that particular role or movie was that
+ * year (confirmed live: Truman Hanks ranked top-5 in four separate years
+ * purely because his current popularity beat the era's other nepo babies
+ * each time — see git history/commit discussion). This ties the ranking to
+ * that specific year's actual film instead.
+ */
+function filmScore(film: BestFilmAppearance): number {
+  return film.voteCount / (film.order + 1);
+}
+
 interface TopNepoBaby {
   tmdbId: number;
   name: string;
   popularity: number;
   wikipediaUrl?: string;
+  bestFilm: BestFilmAppearance;
 }
 
 interface YearStats {
@@ -52,6 +77,7 @@ interface ActorTally {
   name: string;
   popularity: number;
   appearances: number;
+  bestFilm: BestFilmAppearance;
 }
 
 interface YearAccumulator {
@@ -122,14 +148,23 @@ async function collectYear(year: number): Promise<YearAccumulator> {
     }
 
     for (const member of cast) {
+      const thisFilm: BestFilmAppearance = {
+        tmdbId: movie.tmdbId,
+        title: movie.title,
+        voteCount: movie.voteCount,
+        order: member.order,
+      };
+
       const tally = accumulator.actors.get(member.tmdbId);
       if (tally) {
         tally.appearances++;
+        if (filmScore(thisFilm) > filmScore(tally.bestFilm)) tally.bestFilm = thisFilm;
       } else {
         accumulator.actors.set(member.tmdbId, {
           name: member.name,
           popularity: member.popularity,
           appearances: 1,
+          bestFilm: thisFilm,
         });
       }
     }
@@ -242,11 +277,12 @@ async function main() {
             name: tally.name,
             popularity: tally.popularity,
             wikipediaUrl: entry.wikipediaUrl,
+            bestFilm: tally.bestFilm,
           });
         }
       }
 
-      nepoBabies.sort((a, b) => b.popularity - a.popularity);
+      nepoBabies.sort((a, b) => filmScore(b.bestFilm) - filmScore(a.bestFilm));
 
       return {
         year,
