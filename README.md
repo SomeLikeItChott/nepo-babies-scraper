@@ -42,14 +42,13 @@ for why that number and why one year at a time), which covers the real
 historical catalog instead of just what's currently trending. It also
 skips Letterboxd matching entirely, since none of this is extension-facing.
 
-By default it only recomputes the **current** year (and, during the
-first week of January, last year too — some of its movies are still
-gaining votes shortly after year-end) and merges that into whatever's
-already in `output/yearly-stats.json`, leaving other years untouched —
-cheap enough to rerun every week so this year's percentage keeps
-catching up as new releases accumulate votes. To (re)compute a wider
-range — including a full historical backfill — override the start year
-explicitly:
+By default it recomputes the **current year and the previous one** and
+merges that into whatever's already in `output/yearly-stats.json`,
+leaving other years untouched — cheap enough to rerun every week so both
+years keep catching up as votes accumulate (a movie's vote count can keep
+climbing for a long while after release, not just in the first days of
+the following year). To (re)compute a wider range — including a full
+historical backfill — override the start year explicitly:
 
 ```sh
 YEARLY_STATS_START_YEAR=1900 npm run scrape:yearly
@@ -69,11 +68,11 @@ incrementally. `YEARLY_STATS_END_YEAR` bounds the other end of the range.
 
 Every run also caches each actor's Wikidata result (do they have a
 notable parent?) by TMDB id in `.cache/nepo-baby-checks.json` — see
-`src/nepo-baby-cache.ts`. Since the current-year default mostly re-sees
-the same actors week to week, this turns most weekly runs into a lookup
-instead of a repeat Wikidata batch pass. In CI, `update-yearly-stats.yml`
-persists this file between runs via `actions/cache` (GitHub Actions
-checkouts are otherwise fresh every time, with nothing on disk to reuse).
+`src/nepo-baby-cache.ts`. Since the default range mostly re-sees the same
+actors week to week, this turns most weekly runs into a lookup instead of
+a repeat Wikidata batch pass. In CI, `update-yearly-stats.yml` persists
+this file between runs via `actions/cache` (GitHub Actions checkouts are
+otherwise fresh every time, with nothing on disk to reuse).
 
 ## Stats site
 
@@ -111,8 +110,8 @@ GitHub Pages. Needs a `TMDB_API_KEY` repo secret and Pages enabled on the
 `gh-pages` branch.
 
 `.github/workflows/update-yearly-stats.yml` separately runs the
-current-year-only refresh described above on the same weekly cadence
-(an hour offset, to avoid both jobs publishing at once) and publishes
+current-and-previous-year refresh described above on the same weekly
+cadence (an hour offset, to avoid both jobs publishing at once) and publishes
 `yearly-stats.json` to the same `gh-pages` branch. It can also be
 triggered manually from the Actions tab with `start_year`/`end_year`
 inputs for a backfill — see above for why that's best done as several

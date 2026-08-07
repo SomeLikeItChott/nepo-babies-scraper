@@ -4,8 +4,9 @@ on:
   schedule:
     # Weekly, Monday 07:00 UTC — an hour after update-dataset.yml, so the two
     # don't race on publishing to gh-pages. Cheap to run this often because
-    # it defaults to refreshing only the current year (see yearly-stats.ts) —
-    # not the full-catalog scan a real historical backfill needs.
+    # it defaults to refreshing just the current and previous year (see
+    # yearly-stats.ts) — not the full-catalog scan a real historical
+    # backfill needs.
     - cron: "0 7 * * 1"
   workflow_dispatch:
     inputs:
@@ -13,10 +14,11 @@ on:
         description: >
           Override start year for a backfill (e.g. 1900 for the full
           historical catalog). Leave blank for the normal, fast
-          current-year-only refresh. For a full backfill, prefer several
-          runs each covering a decade or two (set end_year too) over one
-          multi-hour run — this job has no checkpointing, so a failure
-          partway through a long run loses all of it, not just the tail.
+          current-and-previous-year refresh. For a full backfill, prefer
+          several runs each covering a decade or two (set end_year too)
+          over one multi-hour run — this job has no checkpointing, so a
+          failure partway through a long run loses all of it, not just
+          the tail.
         required: false
       end_year:
         description: >

@@ -181,22 +181,16 @@ async function main() {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 
-  // Defaults to *only* the current year — cheap enough to rerun every week
-  // so this year's percentage keeps catching up as new releases pick up
-  // votes, without rescanning the whole catalog each time. A one-off full
-  // historical backfill (or a backfill of any specific range) is a manual
-  // invocation with an explicit override, e.g.
-  // `YEARLY_STATS_START_YEAR=1900 npm run scrape:yearly`.
-  //
-  // Exception: during the first week of January, also redo last year —
-  // some of its movies are still gaining votes shortly after year-end (a
-  // late awards-season bump, catching up on a limited release, etc.), so
-  // one final pass catches those before that year is otherwise never
-  // touched again.
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const isFirstRunOfYear = now.getMonth() === 0 && now.getDate() <= 7;
-  const defaultStartYear = isFirstRunOfYear ? currentYear - 1 : currentYear;
+  // Defaults to the current year *and* the previous one — cheap enough to
+  // rerun every week so both keep catching up as votes accumulate. Votes on
+  // a given movie can keep trickling in for a long while (not just in the
+  // first week of January), so last year is never fully "done" either —
+  // always redoing it, not just once at the year boundary, catches that on
+  // an ongoing basis. A one-off full historical backfill (or a backfill of
+  // any specific range) is a manual invocation with an explicit override,
+  // e.g. `YEARLY_STATS_START_YEAR=1900 npm run scrape:yearly`.
+  const currentYear = new Date().getFullYear();
+  const defaultStartYear = currentYear - 1;
 
   const startYear = Number(process.env.YEARLY_STATS_START_YEAR) || defaultStartYear;
   const endYear = Number(process.env.YEARLY_STATS_END_YEAR) || currentYear;
