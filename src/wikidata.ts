@@ -122,6 +122,16 @@ SELECT ?person ?birthDate WHERE {
 `.trim();
 }
 
+function buildAliasesQuery(qids: string[]): string {
+  const values = qids.map((qid) => `wd:${qid}`).join(" ");
+  return `
+SELECT ?person ?alias WHERE {
+  VALUES ?person { ${values} }
+  ?person skos:altLabel ?alias . FILTER(LANG(?alias) = "en")
+}
+`.trim();
+}
+
 interface QidLookupBinding {
   person: { value: string };
   personTmdb: { value: string };
@@ -155,6 +165,11 @@ interface BirthDateBinding {
 interface WikipediaUrlBinding {
   person: { value: string };
   article: { value: string };
+}
+
+interface AliasBinding {
+  person: { value: string };
+  alias: { value: string };
 }
 
 interface SparqlResponse<T> {
@@ -420,6 +435,38 @@ export async function fetchWikipediaUrlsByQid(qids: string[]): Promise<Map<strin
   return urlByQid;
 }
 
+/**
+ * Batch-fetches each person's Wikidata aliases (skos:altLabel, English only)
+ * — used as a fallback set of extra name guesses for resolveLetterboxdSlug
+ * when their primary label fails to produce a matching slug. Confirmed
+ * live: Weston Cage's Wikidata label is "Weston Cage", but his actual
+ * Letterboxd slug is "weston-cage-coppola" — matching an alias, "Weston
+ * Cage Coppola", that the primary label alone never would. Only meant to be
+ * called for the specific people who already failed to resolve (see
+ * index.ts), not the full candidate pool, since most people resolve fine
+ * off their primary label and don't need this at all.
+ */
+export async function fetchAliasesByQid(qids: string[]): Promise<Map<string, string[]>> {
+  const aliasesByQid = new Map<string, string[]>();
+
+  const batches = chunk(qids, VALUES_BATCH_SIZE);
+  for (const [i, batch] of batches.entries()) {
+    if (i > 0) await sleep(300);
+    logBatchProgress("fetching name aliases", i, batches.length);
+
+    const bindings = await runQuery<AliasBinding>(buildAliasesQuery(batch));
+    for (const b of bindings) {
+      const qid = qidFromUri(b.person.value);
+      const alias = b.alias.value;
+      const existing = aliasesByQid.get(qid) ?? [];
+      if (!existing.includes(alias)) existing.push(alias);
+      aliasesByQid.set(qid, existing);
+    }
+  }
+
+  return aliasesByQid;
+}
+
 export async function fetchNepoCandidates(): Promise<{
   candidates: NepoCandidate[];
   filmCasts: FilmCast[];
@@ -484,6 +531,7 @@ export async function fetchNepoCandidates(): Promise<{
     name: c.name,
     tmdbId: c.tmdbId,
     popularity: c.popularity,
+    qid: c.qid,
     wikipediaUrl: c.wikipediaUrl,
     relations: c.relations.map((r) => ({
       type: r.type,

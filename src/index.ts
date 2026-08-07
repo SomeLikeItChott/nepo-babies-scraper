@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fetchNepoCandidates } from "./wikidata.js";
+import { fetchAliasesByQid, fetchNepoCandidates } from "./wikidata.js";
 import { resolveLetterboxdSlug } from "./letterboxd.js";
 import { searchTmdbPersonId } from "./tmdb.js";
 import { computeFilmStats } from "./films.js";
 import { computeParentStats } from "./parents.js";
-import type { NepoDataset, ResolvedRelation, UnresolvedCandidate } from "./types.js";
+import type { CandidateRelation, NepoDataset, ResolvedRelation, UnresolvedCandidate } from "./types.js";
 
 const OUTPUT_DIR = path.join(process.cwd(), "output");
 
@@ -32,6 +32,19 @@ async function main() {
   const dataset: NepoDataset = {};
   const unresolved: UnresolvedCandidate[] = [];
 
+  interface RelationWork {
+    relation: CandidateRelation;
+    parentTmdbId: number | undefined;
+    letterboxdSlug: string | undefined;
+  }
+
+  interface CandidateWork {
+    slug: string | null;
+    relations: RelationWork[];
+  }
+
+  const work: CandidateWork[] = [];
+
   for (const [i, candidate] of candidates.entries()) {
     const slug = await resolveLetterboxdSlug(candidate.name, candidate.tmdbId);
 
@@ -49,7 +62,7 @@ async function main() {
     // wikipediaUrl. Repeated names across candidates (e.g. a parent who's
     // also a popular actor elsewhere in this run, or shared by sibling
     // actors) hit letterboxd.ts's on-disk cache and resolve near-instantly.
-    const relations: ResolvedRelation[] = [];
+    const relations: RelationWork[] = [];
     for (const relation of candidate.relations) {
       const parentTmdbId =
         relation.tmdbId ??
@@ -58,21 +71,82 @@ async function main() {
       const letterboxdSlug = parentTmdbId
         ? (await resolveLetterboxdSlug(relation.name, parentTmdbId)) ?? undefined
         : undefined;
-      relations.push({
-        type: relation.type,
-        name: relation.name,
-        occupations: relation.occupations,
-        letterboxdSlug,
-        wikipediaUrl: relation.wikipediaUrl,
-      });
+      relations.push({ relation, parentTmdbId, letterboxdSlug });
     }
 
-    if (slug) {
-      dataset[slug] = { name: candidate.name, tmdbId: candidate.tmdbId, relations };
-      console.log(`[${i + 1}/${candidates.length}] matched: ${candidate.name} -> ${slug}`);
+    work.push({ slug, relations });
+    console.log(`[${i + 1}/${candidates.length}] ${candidate.name}: ${slug ? `matched -> ${slug}` : "unresolved"}`);
+  }
+
+  // A person's Wikidata label isn't always what Letterboxd actually credits
+  // them under (confirmed live: Weston Cage's label is "Weston Cage", but
+  // his Letterboxd slug is "weston-cage-coppola", matching his Wikidata
+  // alias "Weston Cage Coppola" instead) — retry with their alt-label
+  // aliases, but only for whoever's still unresolved after the primary-name
+  // attempt above, so this doesn't add meaningful runtime to the common
+  // case where the primary label already worked.
+  interface RetryTarget {
+    qid: string;
+    tmdbId: number;
+    resolve: (slug: string) => void;
+  }
+
+  const retryTargets: RetryTarget[] = [];
+  for (const [i, item] of work.entries()) {
+    if (item.slug === null) {
+      retryTargets.push({
+        qid: candidates[i].qid,
+        tmdbId: candidates[i].tmdbId,
+        resolve: (slug) => {
+          item.slug = slug;
+        },
+      });
+    }
+    for (const rel of item.relations) {
+      if (rel.parentTmdbId && !rel.letterboxdSlug) {
+        retryTargets.push({
+          qid: rel.relation.qid,
+          tmdbId: rel.parentTmdbId,
+          resolve: (slug) => {
+            rel.letterboxdSlug = slug;
+          },
+        });
+      }
+    }
+  }
+
+  if (retryTargets.length > 0) {
+    console.log(
+      `\n${retryTargets.length} unresolved — retrying via Wikidata name aliases...`,
+    );
+    const aliasesByQid = await fetchAliasesByQid([...new Set(retryTargets.map((t) => t.qid))]);
+
+    for (const target of retryTargets) {
+      for (const alias of aliasesByQid.get(target.qid) ?? []) {
+        const slug = await resolveLetterboxdSlug(alias, target.tmdbId);
+        if (slug) {
+          console.log(`  resolved via alias "${alias}" -> ${slug}`);
+          target.resolve(slug);
+          break;
+        }
+      }
+    }
+  }
+
+  for (const [i, item] of work.entries()) {
+    const candidate = candidates[i];
+    const relations: ResolvedRelation[] = item.relations.map((rel) => ({
+      type: rel.relation.type,
+      name: rel.relation.name,
+      occupations: rel.relation.occupations,
+      letterboxdSlug: rel.letterboxdSlug,
+      wikipediaUrl: rel.relation.wikipediaUrl,
+    }));
+
+    if (item.slug) {
+      dataset[item.slug] = { name: candidate.name, tmdbId: candidate.tmdbId, relations };
     } else {
       unresolved.push({ ...candidate, reason: "no matching Letterboxd slug found" });
-      console.log(`[${i + 1}/${candidates.length}] unresolved: ${candidate.name}`);
     }
   }
 

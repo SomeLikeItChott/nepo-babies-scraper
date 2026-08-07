@@ -29,6 +29,8 @@ export interface NepoCandidate {
   name: string;
   tmdbId: number;
   popularity: number;
+  /** This actor's own Wikidata QID — used to look up alt-label aliases when the primary name fails to resolve a Letterboxd slug (see index.ts). Not part of the extension-facing ResolvedEntry. */
+  qid: string;
   /** This actor's own English Wikipedia article, if Wikidata has one — distinct from a parent's article. */
   wikipediaUrl?: string;
   relations: CandidateRelation[];
